@@ -516,6 +516,7 @@ class IAPProxy:
             host='127.0.0.1',
             port=self.port,
             ssl_context=('certs/iap.crt', 'certs/iap.key'),
-            debug=True,
-            threaded=True
+            debug=False,  # Changed to False
+            threaded=True,
+            use_reloader=False  # Add this
         )

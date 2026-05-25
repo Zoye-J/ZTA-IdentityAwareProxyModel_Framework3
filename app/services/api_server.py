@@ -132,6 +132,6 @@ class APIGatewayService:
             host='127.0.0.1',
             port=self.port,
             ssl_context=('certs/api.crt', 'certs/api.key'),
-            debug=True,
-            threaded=True
+            debug=False,  # Changed to Falseue,
+            use_reloader=False 
         )

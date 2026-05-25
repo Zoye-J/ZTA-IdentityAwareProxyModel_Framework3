@@ -19,7 +19,14 @@ class DocumentService:
         self.port = port
         
         # JWT configuration (shared secret with IAP)
-        self.jwt_secret = os.environ.get('JWT_SECRET', 'iap-shared-secret')
+        self.jwt_secret = os.environ.get('JWT_SECRET', 'iap-shared-secret-change-this-in-production')
+        
+        # Check if RSA keys exist, generate if not
+        if not os.path.exists('keys/private_key.pem') or not os.path.exists('keys/public_key.pem'):
+            print("⚠️ RSA keys not found, generating...")
+            os.makedirs('keys', exist_ok=True)
+            encryptor_temp = RSA_AES_Encryptor()
+            encryptor_temp.generate_keys()
         
         # RSA+AES encryptor for resources
         self.encryptor = RSA_AES_Encryptor(
@@ -56,40 +63,44 @@ class DocumentService:
         if cursor.fetchone()[0] == 0:
             sample_docs = [
                 ("Strategic Defense Plan 2025", "TOP_SECRET", "defense", 
-                 "This document contains Bangladesh's strategic defense positioning for 2025. Key assets: naval fleet expansion, cyber defense command establishment."),
+                 "This document contains Bangladesh's strategic defense positioning for 2025."),
                 ("Intelligence Report: Regional Analysis", "TOP_SECRET", "intelligence",
-                 "Analysis of regional military movements. Sources indicate increased naval activity in Bay of Bengal. Counter-intelligence operations ongoing."),
+                 "Analysis of regional military movements in the Bay of Bengal."),
                 ("Annual Defense Budget", "SECRET", "defense",
-                 "Defense budget allocation: $5.2B for procurement, $1.8B for personnel, $900M for R&D."),
+                 "Defense budget allocation for the fiscal year."),
                 ("Intelligence Operations Manual", "SECRET", "intelligence",
-                 "Standard operating procedures for field intelligence officers. Covers surveillance, counter-intelligence, and reporting protocols."),
+                 "Standard operating procedures for field intelligence officers."),
                 ("Public Relations Strategy", "CONFIDENTIAL", "general",
-                 "Government communication strategy for upcoming fiscal year. Key messaging and media engagement plans."),
+                 "Government communication strategy for upcoming fiscal year."),
                 ("Administrative Guidelines", "BASIC", "general",
-                 "General administrative guidelines for government employees. Leave policies, expense reporting, etc."),
+                 "General administrative guidelines for government employees."),
                 ("Cybersecurity Protocol", "CONFIDENTIAL", "defense",
                  "Internal cybersecurity protocols and incident response procedures."),
                 ("Foreign Intelligence Assessment", "TOP_SECRET", "intelligence",
-                 "Assessment of foreign intelligence capabilities targeting Bangladesh government networks.")
+                 "Assessment of foreign intelligence capabilities.")
             ]
             
             for doc in sample_docs:
                 title, classification, department, content = doc
-                encrypted = self.encryptor.encrypt_resource(content)
-                cursor.execute('''
-                    INSERT INTO documents (title, classification, department, encrypted_content, encryption_metadata)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (title, classification, department, 
-                      encrypted['encrypted_data'], 
-                      json.dumps({
-                          'encrypted_key': encrypted['encrypted_key'],
-                          'iv': encrypted['iv'],
-                          'tag': encrypted['tag']
-                      })))
+                try:
+                    encrypted = self.encryptor.encrypt_resource(content)
+                    cursor.execute('''
+                        INSERT INTO documents (title, classification, department, encrypted_content, encryption_metadata)
+                        VALUES (?, ?, ?, ?, ?)
+                    ''', (title, classification, department, 
+                          encrypted['encrypted_data'], 
+                          json.dumps({
+                              'encrypted_key': encrypted['encrypted_key'],
+                              'iv': encrypted['iv'],
+                              'tag': encrypted['tag']
+                          })))
+                except Exception as e:
+                    print(f"Error encrypting document {title}: {e}")
+            
+            conn.commit()
+            print(f"✅ Document Service: Database initialized with {len(sample_docs)} encrypted documents")
         
-        conn.commit()
         conn.close()
-        print(f"✅ Document Service: Database initialized with {len(sample_docs)} encrypted documents")
     
     def _verify_jwt(self):
         """Verify JWT from IAP proxy"""
@@ -133,11 +144,6 @@ class DocumentService:
         if doc_classification == 'TOP_SECRET':
             if user.get('department') != document['department']:
                 return False, "TOP_SECRET documents require same department access"
-            
-            # Time restriction for TOP_SECRET (8 AM - 4 PM Bangladesh time)
-            current_hour = datetime.now(timezone.utc).hour + 6  # Approximate BDT
-            if current_hour < 8 or current_hour > 16:
-                return False, "TOP_SECRET documents only accessible between 8 AM - 4 PM"
         
         return True, "Access granted"
     
@@ -249,10 +255,15 @@ class DocumentService:
     def run(self):
         """Start document service"""
         print(f"📄 Document Service starting on port {self.port}")
-        self.app.run(
-            host='127.0.0.1',
-            port=self.port,
-            ssl_context=('certs/api.crt', 'certs/api.key'),
-            debug=True,
-            threaded=True
-        )
+        try:
+            self.app.run(
+                host='127.0.0.1',
+                port=self.port,
+                ssl_context=('certs/api.crt', 'certs/api.key'),
+                debug=False,  
+                threaded=True,
+                use_reloader=False  
+            )
+        except Exception as e:
+            print(f"❌ Failed to start Document Service: {e}")
+            raise

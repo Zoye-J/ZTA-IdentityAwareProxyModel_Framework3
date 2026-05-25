@@ -9,8 +9,9 @@ import sys
 import time
 import threading
 import webbrowser
+import subprocess
 
-# Add current directory to path FIRST
+# Add app to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 def generate_certificates():
@@ -18,65 +19,42 @@ def generate_certificates():
     os.makedirs('certs', exist_ok=True)
     
     if os.path.exists('certs/iap.crt') and os.path.exists('certs/iap.key'):
-        print("✅ Certificates already exist")
-        return
+        # Check if files are not empty
+        if os.path.getsize('certs/iap.crt') > 0 and os.path.getsize('certs/iap.key') > 0:
+            print("✅ Certificates already exist")
+            return
     
     print("🔐 Generating SSL certificates...")
     
-    from cryptography import x509
-    from cryptography.x509.oid import NameOID
-    from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import rsa
-    import datetime
+    from OpenSSL import crypto
     
-    private_key = rsa.generate_private_key(
-        public_exponent=65537,
-        key_size=2048,
-    )
+    def generate_cert(cert_path, key_path, common_name="localhost"):
+        k = crypto.PKey()
+        k.generate_key(crypto.TYPE_RSA, 2048)
+        
+        cert = crypto.X509()
+        cert.get_subject().C = "BD"
+        cert.get_subject().ST = "Dhaka"
+        cert.get_subject().L = "Dhaka"
+        cert.get_subject().O = "ZTA Research"
+        cert.get_subject().OU = "Framework 3"
+        cert.get_subject().CN = common_name
+        cert.set_serial_number(1000)
+        cert.gmtime_adj_notBefore(0)
+        cert.gmtime_adj_notAfter(365*24*60*60)
+        cert.set_issuer(cert.get_subject())
+        cert.set_pubkey(k)
+        cert.sign(k, 'sha256')
+        
+        with open(cert_path, "wb") as f:
+            f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert))
+        with open(key_path, "wb") as f:
+            f.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k))
+        
+        print(f"   Generated: {cert_path}")
     
-    subject = issuer = x509.Name([
-        x509.NameAttribute(NameOID.COUNTRY_NAME, u"BD"),
-        x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, u"Dhaka"),
-        x509.NameAttribute(NameOID.LOCALITY_NAME, u"Dhaka"),
-        x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"ZTA Research"),
-        x509.NameAttribute(NameOID.COMMON_NAME, u"localhost"),
-    ])
-    
-    cert = x509.CertificateBuilder().subject_name(
-        subject
-    ).issuer_name(
-        issuer
-    ).public_key(
-        private_key.public_key()
-    ).serial_number(
-        x509.random_serial_number()
-    ).not_valid_before(
-        datetime.datetime.utcnow()
-    ).not_valid_after(
-        datetime.datetime.utcnow() + datetime.timedelta(days=365)
-    ).add_extension(
-        x509.SubjectAlternativeName([
-            x509.DNSName(u"localhost"),
-            x509.DNSName(u"127.0.0.1"),
-        ]),
-        critical=False,
-    ).sign(private_key, hashes.SHA256())
-    
-    with open("certs/iap.key", "wb") as f:
-        f.write(private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption()
-        ))
-    
-    with open("certs/iap.crt", "wb") as f:
-        f.write(cert.public_bytes(serialization.Encoding.PEM))
-    
-    # Copy for API and Document services
-    import shutil
-    shutil.copy("certs/iap.key", "certs/api.key")
-    shutil.copy("certs/iap.crt", "certs/api.crt")
-    
+    generate_cert('certs/iap.crt', 'certs/iap.key', 'localhost')
+    generate_cert('certs/api.crt', 'certs/api.key', 'localhost')
     print("✅ Certificates generated successfully")
 
 def generate_rsa_keys():
@@ -84,12 +62,12 @@ def generate_rsa_keys():
     os.makedirs('keys', exist_ok=True)
     
     if os.path.exists('keys/private_key.pem') and os.path.exists('keys/public_key.pem'):
-        print("✅ RSA keys already exist")
-        return
+        if os.path.getsize('keys/private_key.pem') > 0 and os.path.getsize('keys/public_key.pem') > 0:
+            print("✅ RSA keys already exist")
+            return
     
     print("🔑 Generating RSA keys for AES encryption...")
     
-    # Direct import after path is set
     from app.crypto.rsa_aes import RSA_AES_Encryptor
     encryptor = RSA_AES_Encryptor()
     encryptor.generate_keys()
@@ -97,16 +75,17 @@ def generate_rsa_keys():
     print("✅ RSA keys generated")
 
 def run_service(service_class, port, name, **kwargs):
-    """Run a service in a separate thread"""
+    """Run a service in a separate thread without debug mode"""
     def target():
         try:
             service = service_class(port=port, **kwargs)
             print(f"🚀 {name} started on port {port}")
+            # Disable debug mode to avoid signal issues
+            service.app.debug = False
+            service.app.use_reloader = False
             service.run()
         except Exception as e:
             print(f"❌ Failed to start {name}: {e}")
-            import traceback
-            traceback.print_exc()
     
     thread = threading.Thread(target=target, daemon=True)
     thread.start()
@@ -123,7 +102,7 @@ def main():
     generate_certificates()
     generate_rsa_keys()
     
-    # Import services - use absolute imports
+    # Import services
     from app.auth_server import AuthServer
     from app.services.api_server import APIGatewayService
     from app.services.document_service import DocumentService
@@ -131,34 +110,56 @@ def main():
     
     threads = []
     
-    # Start services in order
     print("\n📡 Starting services...")
     
+    # Start services in order (disable debug mode)
+    
     # 1. Document Service (Port 8503)
-    threads.append(run_service(DocumentService, 8503, "📄 Document Service"))
+    doc_service = DocumentService(port=8503)
+    doc_service.app.debug = False
+    doc_service.app.use_reloader = False
+    doc_thread = threading.Thread(target=doc_service.run, daemon=True)
+    doc_thread.start()
+    threads.append(doc_thread)
     time.sleep(2)
     
     # 2. API Gateway (Port 8502)
-    threads.append(run_service(APIGatewayService, 8502, "🔀 API Gateway"))
+    api_service = APIGatewayService(port=8502)
+    api_service.app.debug = False
+    api_service.app.use_reloader = False
+    api_thread = threading.Thread(target=api_service.run, daemon=True)
+    api_thread.start()
+    threads.append(api_thread)
     time.sleep(1)
     
     # 3. Auth Server (Port 8501)
-    threads.append(run_service(AuthServer, 8501, "🔐 Auth Server"))
+    auth_service = AuthServer(port=8501)
+    auth_service.app.debug = False
+    auth_service.app.use_reloader = False
+    auth_thread = threading.Thread(target=auth_service.run, daemon=True)
+    auth_thread.start()
+    threads.append(auth_thread)
     time.sleep(1)
     
-    # 4. IAP Proxy (Port 8443 - main entry)
-    threads.append(run_service(IAPProxy, 8443, "🛡️ IAP Proxy"))
+    # 4. IAP Proxy (Port 8443)
+    iap_service = IAPProxy(port=8443)
+    iap_service.app.debug = False
+    iap_service.app.use_reloader = False
+    iap_thread = threading.Thread(target=iap_service.run, daemon=True)
+    iap_thread.start()
+    threads.append(iap_thread)
     time.sleep(2)
     
     print("\n" + "=" * 60)
     print("✅ ALL SERVICES RUNNING")
     print("=" * 60)
-    print("""
+    print(f"""
     🌐 IAP PROXY (Main Entry):     https://localhost:8443
     🔐 Auth Server:                https://localhost:8501
     🔀 API Gateway:                https://localhost:8502
     📄 Document Service:           https://localhost:8503
     
+   
     """)
     
     # Open browser automatically

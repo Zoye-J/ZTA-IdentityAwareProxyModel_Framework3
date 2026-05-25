@@ -136,7 +136,8 @@ class AuthServer:
         self.app.run(
             host='127.0.0.1',
             port=self.port,
-            ssl_context=('certs/iap.crt', 'certs/iap.key'),  # Same cert for simplicity
-            debug=True,
-            threaded=True
+            ssl_context=('certs/iap.crt', 'certs/iap.key'),
+            debug=False, 
+            threaded=True,
+            use_reloader=False  
         )

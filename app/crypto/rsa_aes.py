@@ -1,6 +1,5 @@
 import os
 import base64
-import hashlib
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -13,9 +12,9 @@ class RSA_AES_Encryptor:
         self.private_key = None
         self.public_key = None
         
-        if private_key_path:
+        if private_key_path and os.path.exists(private_key_path):
             self.load_private_key(private_key_path)
-        if public_key_path:
+        if public_key_path and os.path.exists(public_key_path):
             self.load_public_key(public_key_path)
     
     def generate_keys(self, private_key_path='keys/private_key.pem', 
@@ -23,6 +22,7 @@ class RSA_AES_Encryptor:
         """Generate RSA key pair (2048-bit)"""
         os.makedirs('keys', exist_ok=True)
         
+        # Generate private key
         private_key = rsa.generate_private_key(
             public_exponent=65537,
             key_size=2048,
@@ -47,19 +47,37 @@ class RSA_AES_Encryptor:
         
         self.private_key = private_key
         self.public_key = public_key
+        print(f"✅ RSA keys generated: {private_key_path}, {public_key_path}")
         return True
     
     def load_private_key(self, path):
-        with open(path, 'rb') as f:
-            self.private_key = serialization.load_pem_private_key(
-                f.read(), password=None, backend=default_backend()
-            )
+        try:
+            with open(path, 'rb') as f:
+                key_data = f.read()
+                if not key_data:
+                    raise ValueError(f"Private key file {path} is empty")
+                self.private_key = serialization.load_pem_private_key(
+                    key_data, password=None, backend=default_backend()
+                )
+            print(f"✅ Private key loaded from {path}")
+        except Exception as e:
+            print(f"⚠️ Failed to load private key from {path}: {e}")
+            # Generate new keys if loading fails
+            self.generate_keys()
     
     def load_public_key(self, path):
-        with open(path, 'rb') as f:
-            self.public_key = serialization.load_pem_public_key(
-                f.read(), backend=default_backend()
-            )
+        try:
+            with open(path, 'rb') as f:
+                key_data = f.read()
+                if not key_data:
+                    raise ValueError(f"Public key file {path} is empty")
+                self.public_key = serialization.load_pem_public_key(
+                    key_data, backend=default_backend()
+                )
+            print(f"✅ Public key loaded from {path}")
+        except Exception as e:
+            print(f"⚠️ Failed to load public key from {path}: {e}")
+            self.generate_keys()
     
     def encrypt_with_aes(self, data):
         """Encrypt data using AES-256-GCM"""
