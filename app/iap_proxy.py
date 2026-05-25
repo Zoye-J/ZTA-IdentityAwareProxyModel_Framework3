@@ -1,4 +1,4 @@
-from flask import Flask, request, Response, jsonify, session, redirect, url_for
+from flask import Flask, request, Response, jsonify, session, redirect
 import requests
 import jwt
 import os
@@ -14,9 +14,8 @@ class IAPProxy:
         self.port = port
         
         # Service endpoints (all internal)
-        self.auth_service_url = "https://localhost:8501"  # Auth Server
-        self.api_service_url = "https://localhost:8502"   # API Server
-        self.policy_service_url = "http://localhost:8503" # Policy Server (OPA)
+        self.auth_service_url = "https://localhost:8501"
+        self.api_gateway_url = "https://localhost:8502"
         
         # JWT configuration
         self.jwt_secret = os.environ.get('JWT_SECRET', 'iap-shared-secret')
@@ -34,20 +33,19 @@ class IAPProxy:
             if request.path in ['/', '/login', '/callback', '/health']:
                 return None
             
-            # Check for existing session or JWT
+            # Check for JWT token
             auth_header = request.headers.get('Authorization', '')
             jwt_token = request.headers.get('X-IAP-JWT-Assertion', '')
             
             if not jwt_token and auth_header:
                 jwt_token = auth_header.replace('Bearer ', '')
             
-            if not jwt_token and session.get('user'):
-                # Generate new JWT from session
-                jwt_token = self._generate_jwt_from_session(session['user'])
+            if not jwt_token and session.get('jwt'):
+                jwt_token = session.get('jwt')
             
             if not jwt_token:
                 # Redirect to login
-                return redirect(url_for('login', redirect_url=request.url))
+                return redirect(f'/login?redirect_url={request.url}')
             
             # Validate JWT
             validation = self._validate_jwt(jwt_token)
@@ -66,89 +64,69 @@ class IAPProxy:
                 'service': 'Identity-Aware Proxy (IAP)',
                 'status': 'running',
                 'version': '3.0',
-                'message': 'This is the IAP gatekeeper - all requests must pass through me'
+                'message': 'This is the IAP gatekeeper - all requests must pass through me',
+                'architecture': 'IAP + Separate Document Service'
             })
         
         @self.app.route('/login')
         def login():
-            """Login page - redirects to auth service"""
+            """Login page"""
             redirect_url = request.args.get('redirect_url', '/dashboard')
             return self._render_login_page(redirect_url)
         
         @self.app.route('/callback')
         def callback():
-            """OAuth callback from auth service"""
-            code = request.args.get('code')
-            if not code:
-                return jsonify({'error': 'No authorization code'}), 400
+            """OAuth callback"""
+            token = request.args.get('token')
+            if token:
+                session['jwt'] = token
+                redirect_url = request.args.get('redirect_url', '/dashboard')
+                return redirect(redirect_url)
             
-            # Exchange code for user info from auth service
-            response = requests.post(
-                f"{self.auth_service_url}/token",
-                json={'code': code},
-                verify=False  # Disable SSL verification for dev
-            )
-            
-            if response.status_code != 200:
-                return jsonify({'error': 'Authentication failed'}), 401
-            
-            user_data = response.json()
-            
-            # Generate JWT token
-            jwt_token = self._generate_jwt(user_data)
-            
-            # Store in session
-            session['user'] = user_data
-            session['jwt'] = jwt_token
-            
-            redirect_url = request.args.get('redirect_url', '/dashboard')
-            return redirect(f"{redirect_url}?token={jwt_token}")
+            return jsonify({'error': 'No token provided'}), 400
         
         @self.app.route('/dashboard')
         def dashboard():
-            """Protected dashboard - proxied to API server"""
-            if not hasattr(request, 'user'):
-                return redirect(url_for('login', redirect_url='/dashboard'))
-            
-            # Forward request to API server
-            return self._proxy_request('/api/v1/user/dashboard')
+            """Dashboard"""
+            return self._render_dashboard_page()
         
-        @self.app.route('/api/v1/documents')
-        def get_documents():
-            """Proxy document list request to API server"""
+        @self.app.route('/api/v1/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
+        def proxy_api(path):
+            """Proxy API requests to API Gateway"""
             if not hasattr(request, 'user'):
                 return jsonify({'error': 'Unauthorized'}), 401
             
-            return self._proxy_request('/api/v1/documents')
-        
-        @self.app.route('/api/v1/documents/<int:doc_id>')
-        def get_document(doc_id):
-            """Proxy single document request"""
-            if not hasattr(request, 'user'):
-                return jsonify({'error': 'Unauthorized'}), 401
+            url = f"{self.api_gateway_url}/api/v1/{path}"
             
-            return self._proxy_request(f'/api/v1/documents/{doc_id}')
+            headers = dict(request.headers)
+            headers['X-IAP-JWT-Assertion'] = request.jwt_token
+            headers['X-User-Clearance'] = request.user.get('clearance', '')
+            headers['X-User-Department'] = request.user.get('department', '')
+            
+            try:
+                response = requests.request(
+                    method=request.method,
+                    url=url,
+                    headers=headers,
+                    data=request.get_data(),
+                    cookies=request.cookies,
+                    verify=False
+                )
+                
+                return Response(
+                    response.content,
+                    status=response.status_code,
+                    headers=dict(response.headers)
+                )
+            except requests.exceptions.RequestException as e:
+                return jsonify({'error': f'Proxy error: {str(e)}'}), 502
         
         @self.app.route('/health')
         def health():
-            return jsonify({'status': 'healthy', 'service': 'IAP'})
-        
-        # Catch-all route for all other requests
-        @self.app.route('/', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
-        @self.app.route('/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
-        def catch_all(path):
-            """Proxy all other requests to the appropriate backend"""
-            if not hasattr(request, 'user') and path not in ['login', 'callback', 'health']:
-                return redirect(url_for('login', redirect_url=request.url))
-            
-            # Determine target service based on path
-            if path.startswith('api/'):
-                return self._proxy_request(f'/{path}', self.api_service_url)
-            else:
-                return self._proxy_request(f'/{path}', self.api_service_url)
+            return jsonify({'status': 'healthy', 'service': 'IAP Proxy'})
     
     def _generate_jwt(self, user_data):
-        """Generate JWT token for authenticated user"""
+        """Generate JWT token"""
         payload = {
             'user_id': user_data.get('user_id'),
             'username': user_data.get('username'),
@@ -157,20 +135,14 @@ class IAPProxy:
             'email': user_data.get('email', ''),
             'exp': datetime.now(timezone.utc) + timedelta(hours=8),
             'iat': datetime.now(timezone.utc),
-            'iss': 'iap-proxy',
-            'aud': 'protected-services'
+            'iss': 'iap-proxy'
         }
         return jwt.encode(payload, self.jwt_secret, algorithm=self.algorithm)
-    
-    def _generate_jwt_from_session(self, user_data):
-        """Generate JWT from session data"""
-        return self._generate_jwt(user_data)
     
     def _validate_jwt(self, token):
         """Validate JWT token"""
         try:
-            payload = jwt.decode(token, self.jwt_secret, algorithms=[self.algorithm], 
-                                audience='protected-services')
+            payload = jwt.decode(token, self.jwt_secret, algorithms=[self.algorithm])
             return {'valid': True, 'payload': payload}
         except jwt.ExpiredSignatureError:
             return {'valid': False, 'error': 'Token expired'}
@@ -178,7 +150,7 @@ class IAPProxy:
             return {'valid': False, 'error': str(e)}
     
     def _render_login_page(self, redirect_url):
-        """Render HTML login page"""
+        """Render login page"""
         return f'''
         <!DOCTYPE html>
         <html>
@@ -186,7 +158,7 @@ class IAPProxy:
             <title>IAP Login - Identity-Aware Proxy</title>
             <style>
                 body {{
-                    font-family: Arial, sans-serif;
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                     display: flex;
                     justify-content: center;
                     align-items: center;
@@ -199,43 +171,31 @@ class IAPProxy:
                     padding: 40px;
                     border-radius: 10px;
                     box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-                    text-align: center;
-                    width: 350px;
+                    width: 400px;
                 }}
                 h1 {{
                     color: #333;
                     margin-bottom: 10px;
+                    text-align: center;
                 }}
                 .subtitle {{
                     color: #666;
                     margin-bottom: 30px;
+                    text-align: center;
                     font-size: 14px;
-                }}
-                .btn-login {{
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    border: none;
-                    padding: 12px 30px;
-                    border-radius: 5px;
-                    font-size: 16px;
-                    cursor: pointer;
-                    width: 100%;
-                    margin-bottom: 10px;
-                }}
-                .btn-login:hover {{
-                    opacity: 0.9;
                 }}
                 .user-card {{
                     border: 1px solid #ddd;
                     border-radius: 8px;
                     padding: 15px;
-                    margin: 15px 0;
+                    margin: 10px 0;
                     cursor: pointer;
                     transition: all 0.3s;
                 }}
                 .user-card:hover {{
                     background: #f5f5f5;
                     border-color: #667eea;
+                    transform: translateX(5px);
                 }}
                 .user-name {{
                     font-weight: bold;
@@ -258,6 +218,20 @@ class IAPProxy:
                 .badge-confidential {{ background: #FF9800; color: white; }}
                 .badge-secret {{ background: #f44336; color: white; }}
                 .badge-top_secret {{ background: #9C27B0; color: white; }}
+                .btn-login {{
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    border: none;
+                    padding: 12px;
+                    border-radius: 5px;
+                    font-size: 16px;
+                    cursor: pointer;
+                    width: 100%;
+                    margin-top: 10px;
+                }}
+                .btn-login:hover {{
+                    opacity: 0.9;
+                }}
             </style>
         </head>
         <body>
@@ -285,35 +259,47 @@ class IAPProxy:
             
             <script>
                 const REDIRECT_URL = '{redirect_url}';
+                const AUTH_URL = 'https://localhost:8501';
                 
                 async function loginAs(username, clearance, department) {{
-                    const response = await fetch('{self.auth_service_url}/auth/manual', {{
-                        method: 'POST',
-                        headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify({{ username, clearance, department }})
-                    }});
-                    
-                    const data = await response.json();
-                    if (data.token) {{
-                        window.location.href = REDIRECT_URL + '?token=' + data.token;
+                    try {{
+                        const response = await fetch(`${{AUTH_URL}}/auth/manual`, {{
+                            method: 'POST',
+                            headers: {{ 'Content-Type': 'application/json' }},
+                            body: JSON.stringify({{ username, clearance, department }})
+                        }});
+                        
+                        const data = await response.json();
+                        if (data.token) {{
+                            window.location.href = `/callback?token=${{data.token}}&redirect_url=${{REDIRECT_URL}}`;
+                        }}
+                    }} catch (error) {{
+                        console.error('Login error:', error);
+                        alert('Login failed. Make sure auth server is running.');
                     }}
                 }}
                 
-                function manualLogin() {{
+                async function manualLogin() {{
                     const username = prompt('Enter username:');
                     const password = prompt('Enter password:');
                     if (username && password) {{
-                        fetch('{self.auth_service_url}/auth/login', {{
-                            method: 'POST',
-                            headers: {{ 'Content-Type': 'application/json' }},
-                            body: JSON.stringify({{ username, password }})
-                        }})
-                        .then(res => res.json())
-                        .then(data => {{
+                        try {{
+                            const response = await fetch(`${{AUTH_URL}}/auth/login`, {{
+                                method: 'POST',
+                                headers: {{ 'Content-Type': 'application/json' }},
+                                body: JSON.stringify({{ username, password }})
+                            }});
+                            
+                            const data = await response.json();
                             if (data.token) {{
-                                window.location.href = REDIRECT_URL + '?token=' + data.token;
+                                window.location.href = `/callback?token=${{data.token}}&redirect_url=${{REDIRECT_URL}}`;
+                            }} else {{
+                                alert('Login failed: ' + (data.error || 'Unknown error'));
                             }}
-                        }});
+                        }} catch (error) {{
+                            console.error('Login error:', error);
+                            alert('Login failed. Make sure auth server is running.');
+                        }}
                     }}
                 }}
             </script>
@@ -321,42 +307,211 @@ class IAPProxy:
         </html>
         '''
     
-    def _proxy_request(self, target_path, target_url=None):
-        """Forward request to target service with JWT injection"""
-        if target_url is None:
-            target_url = self.api_service_url
-        
-        url = f"{target_url}{target_path}"
-        
-        # Prepare headers - INJECT JWT token (IAP standard)
-        headers = dict(request.headers)
-        headers['X-IAP-JWT-Assertion'] = request.jwt_token if hasattr(request, 'jwt_token') else ''
-        headers['X-Original-User'] = request.user.get('username', '') if hasattr(request, 'user') else ''
-        headers['X-User-Clearance'] = request.user.get('clearance', '') if hasattr(request, 'user') else ''
-        headers['X-User-Department'] = request.user.get('department', '') if hasattr(request, 'user') else ''
-        
-        # Forward the request
-        try:
-            response = requests.request(
-                method=request.method,
-                url=url,
-                headers=headers,
-                data=request.get_data(),
-                cookies=request.cookies,
-                verify=False  # Disable SSL verification for dev
-            )
+    def _render_dashboard_page(self):
+        """Render dashboard"""
+        user = getattr(request, 'user', {})
+        return f'''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>IAP Dashboard</title>
+            <style>
+                body {{
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    margin: 0;
+                    padding: 20px;
+                    background: #f5f5f5;
+                }}
+                .header {{
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    padding: 20px;
+                    border-radius: 10px;
+                    margin-bottom: 20px;
+                }}
+                .container {{
+                    max-width: 1200px;
+                    margin: 0 auto;
+                }}
+                .user-info {{
+                    background: white;
+                    padding: 20px;
+                    border-radius: 10px;
+                    margin-bottom: 20px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                }}
+                .documents {{
+                    background: white;
+                    padding: 20px;
+                    border-radius: 10px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                }}
+                .doc-card {{
+                    border: 1px solid #ddd;
+                    border-radius: 8px;
+                    padding: 15px;
+                    margin: 10px 0;
+                    cursor: pointer;
+                    transition: all 0.3s;
+                }}
+                .doc-card:hover {{
+                    background: #f9f9f9;
+                    border-color: #667eea;
+                }}
+                .doc-title {{
+                    font-weight: bold;
+                    color: #333;
+                }}
+                .doc-class {{
+                    font-size: 12px;
+                    display: inline-block;
+                    padding: 2px 8px;
+                    border-radius: 4px;
+                    margin-left: 10px;
+                }}
+                .modal {{
+                    display: none;
+                    position: fixed;
+                    z-index: 1000;
+                    left: 0;
+                    top: 0;
+                    width: 100%;
+                    height: 100%;
+                    background-color: rgba(0,0,0,0.5);
+                }}
+                .modal-content {{
+                    background-color: white;
+                    margin: 10% auto;
+                    padding: 20px;
+                    border-radius: 10px;
+                    width: 60%;
+                    max-width: 600px;
+                }}
+                .close {{
+                    color: #aaa;
+                    float: right;
+                    font-size: 28px;
+                    font-weight: bold;
+                    cursor: pointer;
+                }}
+                .close:hover {{
+                    color: black;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🔐 Identity-Aware Proxy Dashboard</h1>
+                    <p>Framework 3 - IAP Model with Separate Document Service</p>
+                </div>
+                
+                <div class="user-info">
+                    <h3>👤 User Information</h3>
+                    <p><strong>Username:</strong> {user.get('username', 'Unknown')}</p>
+                    <p><strong>Clearance:</strong> <span class="doc-class" style="background: #9C27B0; color: white;">{user.get('clearance', 'BASIC')}</span></p>
+                    <p><strong>Department:</strong> {user.get('department', 'general')}</p>
+                </div>
+                
+                <div class="documents">
+                    <h3>📄 Available Documents</h3>
+                    <div id="doc-list">Loading documents...</div>
+                </div>
+            </div>
             
-            # Return the response back to client
-            return Response(
-                response.content,
-                status=response.status_code,
-                headers=dict(response.headers)
-            )
-        except requests.exceptions.RequestException as e:
-            return jsonify({'error': f'Proxy error: {str(e)}'}), 502
+            <div id="doc-modal" class="modal">
+                <div class="modal-content">
+                    <span class="close">&times;</span>
+                    <h3 id="modal-title"></h3>
+                    <p id="modal-classification"></p>
+                    <hr>
+                    <p id="modal-content"></p>
+                </div>
+            </div>
+            
+            <script>
+                const API_URL = '/api/v1';
+                
+                async function loadDocuments() {{
+                    try {{
+                        const response = await fetch(`${{API_URL}}/documents`);
+                        const data = await response.json();
+                        
+                        if (data.documents && data.documents.length > 0) {{
+                            const docList = document.getElementById('doc-list');
+                            docList.innerHTML = '';
+                            
+                            data.documents.forEach(doc => {{
+                                const docCard = document.createElement('div');
+                                docCard.className = 'doc-card';
+                                docCard.onclick = () => viewDocument(doc.id);
+                                
+                                let classColor = '#4CAF50';
+                                if (doc.classification === 'CONFIDENTIAL') classColor = '#FF9800';
+                                if (doc.classification === 'SECRET') classColor = '#f44336';
+                                if (doc.classification === 'TOP_SECRET') classColor = '#9C27B0';
+                                
+                                docCard.innerHTML = `
+                                    <div class="doc-title">
+                                        ${{doc.title}}
+                                        <span class="doc-class" style="background: ${{classColor}}; color: white;">
+                                            ${{doc.classification}}
+                                        </span>
+                                    </div>
+                                    <div class="user-clearance">Department: ${{doc.department}}</div>
+                                `;
+                                docList.appendChild(docCard);
+                            }});
+                        }} else {{
+                            document.getElementById('doc-list').innerHTML = '<p>No documents available with your clearance level.</p>';
+                        }}
+                    }} catch (error) {{
+                        console.error('Error loading documents:', error);
+                        document.getElementById('doc-list').innerHTML = '<p>Error loading documents. Make sure services are running.</p>';
+                    }}
+                }}
+                
+                async function viewDocument(docId) {{
+                    try {{
+                        const response = await fetch(`${{API_URL}}/documents/${{docId}}`);
+                        const doc = await response.json();
+                        
+                        document.getElementById('modal-title').textContent = doc.title;
+                        document.getElementById('modal-classification').innerHTML = 
+                            `<strong>Classification:</strong> ${{doc.classification}} | <strong>Department:</strong> ${{doc.department}}`;
+                        document.getElementById('modal-content').textContent = doc.content;
+                        
+                        document.getElementById('doc-modal').style.display = 'block';
+                    }} catch (error) {{
+                        console.error('Error loading document:', error);
+                        alert('Error loading document: ' + error.message);
+                    }}
+                }}
+                
+                // Modal close functionality
+                const modal = document.getElementById('doc-modal');
+                const closeBtn = document.getElementsByClassName('close')[0];
+                
+                closeBtn.onclick = function() {{
+                    modal.style.display = 'none';
+                }}
+                
+                window.onclick = function(event) {{
+                    if (event.target == modal) {{
+                        modal.style.display = 'none';
+                    }}
+                }}
+                
+                // Load documents on page load
+                loadDocuments();
+            </script>
+        </body>
+        </html>
+        '''
     
     def run(self):
         """Start the IAP proxy server"""
+        print(f"🔐 IAP Proxy starting on port {self.port}")
         self.app.run(
             host='127.0.0.1',
             port=self.port,
