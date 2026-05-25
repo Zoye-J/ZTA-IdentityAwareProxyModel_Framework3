@@ -89,22 +89,27 @@ class DocumentService:
         cursor.execute('SELECT COUNT(*) FROM documents')
         if cursor.fetchone()[0] == 0:
             sample_docs = [
+                # Defense Department Documents
                 ("Strategic Defense Plan 2025", "TOP_SECRET", "defense", 
-                 "This document contains Bangladesh's strategic defense positioning for 2025."),
-                ("Intelligence Report: Regional Analysis", "TOP_SECRET", "intelligence",
-                 "Analysis of regional military movements in the Bay of Bengal."),
+                 "This document contains Bangladesh's strategic defense positioning for 2025. RESTRICTED to Defense department only."),
                 ("Annual Defense Budget", "SECRET", "defense",
-                 "Defense budget allocation for the fiscal year."),
-                ("Intelligence Operations Manual", "SECRET", "intelligence",
-                 "Standard operating procedures for field intelligence officers."),
-                ("Public Relations Strategy", "CONFIDENTIAL", "general",
-                 "Government communication strategy for upcoming fiscal year."),
-                ("Administrative Guidelines", "BASIC", "general",
-                 "General administrative guidelines for government employees."),
+                 "Defense budget allocation for the fiscal year. RESTRICTED to Defense department only."),
                 ("Cybersecurity Protocol", "CONFIDENTIAL", "defense",
-                 "Internal cybersecurity protocols and incident response procedures."),
+                 "Internal cybersecurity protocols and incident response procedures. RESTRICTED to Defense department only."),
+                
+                # Intelligence Department Documents
+                ("Intelligence Report: Regional Analysis", "TOP_SECRET", "intelligence",
+                 "Analysis of regional military movements in the Bay of Bengal. RESTRICTED to Intelligence department only."),
+                ("Intelligence Operations Manual", "SECRET", "intelligence",
+                 "Standard operating procedures for field intelligence officers. RESTRICTED to Intelligence department only."),
                 ("Foreign Intelligence Assessment", "TOP_SECRET", "intelligence",
-                 "Assessment of foreign intelligence capabilities.")
+                 "Assessment of foreign intelligence capabilities. RESTRICTED to Intelligence department only."),
+                
+                # General Department Documents (Accessible to EVERYONE)
+                ("Public Relations Strategy", "CONFIDENTIAL", "general",
+                 "Government communication strategy for upcoming fiscal year. ACCESSIBLE TO ALL DEPARTMENTS."),
+                ("Administrative Guidelines", "BASIC", "general",
+                 "General administrative guidelines for government employees. ACCESSIBLE TO ALL DEPARTMENTS."),
             ]
             
             for doc in sample_docs:
@@ -129,8 +134,6 @@ class DocumentService:
         
         conn.close()
     
-
-    
     def _require_auth(self, f):
         """Decorator to verify JWT from IAP"""
         @wraps(f)
@@ -143,19 +146,40 @@ class DocumentService:
         return decorated
     
     def _check_access(self, user, document):
-        """Check if user can access document based on clearance and department"""
+        """
+        Check if user can access document based on clearance and department.
+        
+        Rules:
+        1. GENERAL department documents are accessible by EVERYONE
+        2. Other department documents are ONLY accessible by users from the SAME department
+        3. Clearance level must be sufficient (BASIC < CONFIDENTIAL < SECRET < TOP_SECRET)
+        4. TOP_SECRET requires same department AND business hours
+        """
         clearance_levels = {'BASIC': 0, 'CONFIDENTIAL': 1, 'SECRET': 2, 'TOP_SECRET': 3}
         
         user_clearance = user.get('clearance', 'BASIC')
+        user_department = user.get('department', 'general')
         doc_classification = document['classification']
+        doc_department = document['department']
         
+        print(f"🔍 Access Check - User: {user.get('username')}, Dept: {user_department}, Clearance: {user_clearance}")
+        print(f"🔍 Document: {document['title']}, Dept: {doc_department}, Class: {doc_classification}")
+        
+        # RULE 1: Check clearance level
         if clearance_levels.get(user_clearance, 0) < clearance_levels.get(doc_classification, 0):
-            return False, "Insufficient clearance"
+            return False, f"Insufficient clearance. Required: {doc_classification}, Your: {user_clearance}"
         
-        # TOP_SECRET documents require same department
+        # RULE 2: Department restriction (GENERAL documents are accessible by everyone)
+        if doc_department != 'general':
+            if user_department != doc_department:
+                return False, f"This document is restricted to {doc_department} department only. Your department: {user_department}"
+        
+        # RULE 3: TOP_SECRET additional restrictions (business hours)
         if doc_classification == 'TOP_SECRET':
-            if user.get('department') != document['department']:
-                return False, "TOP_SECRET documents require same department access"
+            # Time restriction for TOP_SECRET (8 AM - 4 PM Bangladesh time)
+            current_hour = datetime.now(timezone.utc).hour + 6  # Approximate BDT
+            if current_hour < 8 or current_hour > 16:
+                return False, "TOP_SECRET documents only accessible between 8 AM - 4 PM (Bangladesh Time)"
         
         return True, "Access granted"
     
@@ -174,6 +198,8 @@ class DocumentService:
             conn.close()
             
             accessible_docs = []
+            denied_docs = []
+            
             for doc in all_docs:
                 doc_dict = {
                     'id': doc[0],
@@ -182,13 +208,18 @@ class DocumentService:
                     'department': doc[3]
                 }
                 
-                access_granted, _ = self._check_access(request.user, doc_dict)
+                access_granted, message = self._check_access(request.user, doc_dict)
                 if access_granted:
                     accessible_docs.append(doc_dict)
+                else:
+                    denied_docs.append({'title': doc_dict['title'], 'reason': message})
+            
+            print(f"✅ User {request.user.get('username')} can access {len(accessible_docs)} docs, denied {len(denied_docs)} docs")
             
             return jsonify({
                 'documents': accessible_docs,
                 'total': len(accessible_docs),
+                'denied_count': len(denied_docs),
                 'user': {
                     'username': request.user.get('username'),
                     'clearance': request.user.get('clearance'),
