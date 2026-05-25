@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IAP Dashboard</title>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .user-info {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .documents {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .doc-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .doc-card:hover {
+            background: #f9f9f9;
+            border-color: #667eea;
+            transform: translateX(5px);
+        }
+        .doc-title {
+            font-weight: bold;
+            color: #333;
+        }
+        .doc-class {
+            font-size: 12px;
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-left: 10px;
+        }
+        .logout-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        .logout-btn:hover {
+            background: #c82333;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 60%;
+            max-width: 600px;
+        }
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close:hover {
+            color: black;
+        }
+        .doc-content {
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .badge-top-secret { background: #9C27B0; color: white; }
+        .badge-secret { background: #f44336; color: white; }
+        .badge-confidential { background: #FF9800; color: white; }
+        .badge-basic { background: #4CAF50; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 Identity-Aware Proxy Dashboard</h1>
+            <p>Framework 3 - IAP Model with Separate Document Service</p>
+        </div>
+        
+        <div class="user-info" id="userInfo">
+            <h3>👤 User Information</h3>
+            <div id="userDetails">Loading...</div>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+        
+        <div class="documents">
+            <h3>📄 Available Documents</h3>
+            <div id="doc-list">Loading documents...</div>
+        </div>
+    </div>
+    
+    <div id="doc-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3 id="modal-title"></h3>
+            <p id="modal-classification"></p>
+            <hr>
+            <p id="modal-content" class="doc-content"></p>
+        </div>
+    </div>
+    
+    <script>
+        // Properly escape JSON data from Flask
+        const userData = JSON.parse('{{ user_data | tojson | safe }}');
+        
+        const API_URL = '/api/v1';
+        
+        function displayUserInfo() {
+            const userDetails = document.getElementById('userDetails');
+            let badgeClass = 'badge-basic';
+            if (userData.clearance === 'TOP_SECRET') badgeClass = 'badge-top-secret';
+            else if (userData.clearance === 'SECRET') badgeClass = 'badge-secret';
+            else if (userData.clearance === 'CONFIDENTIAL') badgeClass = 'badge-confidential';
+            
+            userDetails.innerHTML = `
+                <p><strong>Username:</strong> ${userData.username || 'Unknown'}</p>
+                <p><strong>Clearance:</strong> <span class="badge ${badgeClass}">${userData.clearance || 'BASIC'}</span></p>
+                <p><strong>Department:</strong> ${userData.department || 'general'}</p>
+            `;
+        }
+        
+        async function loadDocuments() {
+            try {
+                const response = await fetch(`${API_URL}/documents`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const data = await response.json();
+                
+                if (data.documents && data.documents.length > 0) {
+                    const docList = document.getElementById('doc-list');
+                    docList.innerHTML = '';
+                    
+                    data.documents.forEach(doc => {
+                        const docCard = document.createElement('div');
+                        docCard.className = 'doc-card';
+                        docCard.onclick = () => viewDocument(doc.id);
+                        
+                        let classColor = '#4CAF50';
+                        let className = 'BASIC';
+                        if (doc.classification === 'CONFIDENTIAL') { classColor = '#FF9800'; className = 'CONFIDENTIAL'; }
+                        if (doc.classification === 'SECRET') { classColor = '#f44336'; className = 'SECRET'; }
+                        if (doc.classification === 'TOP_SECRET') { classColor = '#9C27B0'; className = 'TOP_SECRET'; }
+                        
+                        docCard.innerHTML = `
+                            <div class="doc-title">
+                                ${escapeHtml(doc.title)}
+                                <span class="doc-class" style="background: ${classColor}; color: white;">
+                                    ${className}
+                                </span>
+                            </div>
+                            <div style="font-size: 12px; color: #666; margin-top: 5px;">Department: ${escapeHtml(doc.department)}</div>
+                        `;
+                        docList.appendChild(docCard);
+                    });
+                } else {
+                    document.getElementById('doc-list').innerHTML = '<p>No documents available with your clearance level.</p>';
+                }
+            } catch (error) {
+                console.error('Error loading documents:', error);
+                document.getElementById('doc-list').innerHTML = '<p>Error loading documents. Make sure services are running.</p>';
+            }
+        }
+        
+        async function viewDocument(docId) {
+            try {
+                const response = await fetch(`${API_URL}/documents/${docId}`);
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to load document');
+                }
+                const doc = await response.json();
+                
+                document.getElementById('modal-title').textContent = doc.title;
+                
+                let badgeClass = 'badge-basic';
+                if (doc.classification === 'TOP_SECRET') badgeClass = 'badge-top-secret';
+                else if (doc.classification === 'SECRET') badgeClass = 'badge-secret';
+                else if (doc.classification === 'CONFIDENTIAL') badgeClass = 'badge-confidential';
+                
+                document.getElementById('modal-classification').innerHTML = 
+                    `<strong>Classification:</strong> <span class="badge ${badgeClass}">${escapeHtml(doc.classification)}</span> | <strong>Department:</strong> ${escapeHtml(doc.department)}`;
+                document.getElementById('modal-content').textContent = doc.content;
+                
+                document.getElementById('doc-modal').style.display = 'block';
+            } catch (error) {
+                console.error('Error loading document:', error);
+                alert('Error loading document: ' + error.message);
+            }
+        }
+        
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function logout() {
+            window.location.href = '/login';
+        }
+        
+        // Modal close functionality
+        const modal = document.getElementById('doc-modal');
+        const closeBtn = document.getElementsByClassName('close')[0];
+        
+        closeBtn.onclick = function() {
+            modal.style.display = 'none';
+        }
+        
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        }
+        
+        // Initialize page
+        displayUserInfo();
+        loadDocuments();
+    </script>
+</body>
+</html>

@@ -1,9 +1,11 @@
-from flask import Flask, request, Response, jsonify, session, redirect, send_from_directory
+from flask import Flask, request, Response, jsonify, session, redirect, render_template
 import requests
 import jwt
 import os
 from datetime import datetime, timedelta, timezone
-from functools import wraps
+
+# Use the SAME secret across all services
+JWT_SECRET = "iap-shared-secret-framework3-2025"
 
 class IAPProxy:
     """Identity-Aware Proxy - The main gatekeeper"""
@@ -17,8 +19,8 @@ class IAPProxy:
         self.auth_service_url = "https://localhost:8501"
         self.api_gateway_url = "https://localhost:8502"
         
-        # JWT configuration
-        self.jwt_secret = os.environ.get('JWT_SECRET', 'iap-shared-secret-change-this-in-production')
+        # Use the same secret as other services
+        self.jwt_secret = JWT_SECRET
         self.algorithm = 'HS256'
         
         self._setup_routes()
@@ -70,15 +72,9 @@ class IAPProxy:
         
         @self.app.route('/login')
         def login():
-            """Login page - serve HTML"""
+            """Login page - serve HTML template"""
             redirect_url = request.args.get('redirect_url', '/dashboard')
-            
-            # Read the HTML file
-            template_path = os.path.join(os.path.dirname(__file__), 'templates', 'login.html')
-            with open(template_path, 'r', encoding='utf-8') as f:
-                html_content = f.read()
-            
-            return html_content
+            return render_template('login.html', redirect_url=redirect_url)
         
         @self.app.route('/callback')
         def callback():
@@ -93,8 +89,11 @@ class IAPProxy:
         
         @self.app.route('/dashboard')
         def dashboard():
-            """Dashboard"""
-            return self._render_dashboard_page()
+            """Dashboard - serve HTML template with user data"""
+            if not hasattr(request, 'user'):
+                return redirect('/login')
+            
+            return render_template('dashboard.html', user_data=request.user)
         
         @self.app.route('/api/v1/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
         def proxy_api(path):
@@ -131,249 +130,18 @@ class IAPProxy:
         def health():
             return jsonify({'status': 'healthy', 'service': 'IAP Proxy'})
     
-    def _generate_jwt(self, user_data):
-        """Generate JWT token"""
-        payload = {
-            'user_id': user_data.get('user_id'),
-            'username': user_data.get('username'),
-            'clearance': user_data.get('clearance', 'BASIC'),
-            'department': user_data.get('department', 'general'),
-            'email': user_data.get('email', ''),
-            'exp': datetime.now(timezone.utc) + timedelta(hours=8),
-            'iat': datetime.now(timezone.utc),
-            'iss': 'iap-proxy'
-        }
-        return jwt.encode(payload, self.jwt_secret, algorithm=self.algorithm)
-    
     def _validate_jwt(self, token):
         """Validate JWT token"""
         try:
             payload = jwt.decode(token, self.jwt_secret, algorithms=[self.algorithm])
+            print(f"✅ IAP Proxy: JWT validated for user: {payload.get('username')}")
             return {'valid': True, 'payload': payload}
         except jwt.ExpiredSignatureError:
+            print("❌ IAP Proxy: JWT expired")
             return {'valid': False, 'error': 'Token expired'}
         except jwt.InvalidTokenError as e:
+            print(f"❌ IAP Proxy: JWT invalid - {e}")
             return {'valid': False, 'error': str(e)}
-    
-    def _render_dashboard_page(self):
-        """Render dashboard"""
-        user = getattr(request, 'user', {})
-        return f'''
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>IAP Dashboard</title>
-            <style>
-                body {{
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                    margin: 0;
-                    padding: 20px;
-                    background: #f5f5f5;
-                }}
-                .header {{
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    padding: 20px;
-                    border-radius: 10px;
-                    margin-bottom: 20px;
-                }}
-                .container {{
-                    max-width: 1200px;
-                    margin: 0 auto;
-                }}
-                .user-info {{
-                    background: white;
-                    padding: 20px;
-                    border-radius: 10px;
-                    margin-bottom: 20px;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                }}
-                .documents {{
-                    background: white;
-                    padding: 20px;
-                    border-radius: 10px;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                }}
-                .doc-card {{
-                    border: 1px solid #ddd;
-                    border-radius: 8px;
-                    padding: 15px;
-                    margin: 10px 0;
-                    cursor: pointer;
-                    transition: all 0.3s;
-                }}
-                .doc-card:hover {{
-                    background: #f9f9f9;
-                    border-color: #667eea;
-                }}
-                .doc-title {{
-                    font-weight: bold;
-                    color: #333;
-                }}
-                .doc-class {{
-                    font-size: 12px;
-                    display: inline-block;
-                    padding: 2px 8px;
-                    border-radius: 4px;
-                    margin-left: 10px;
-                }}
-                .logout-btn {{
-                    background: #dc3545;
-                    color: white;
-                    border: none;
-                    padding: 10px 20px;
-                    border-radius: 5px;
-                    cursor: pointer;
-                    margin-top: 20px;
-                }}
-                .logout-btn:hover {{
-                    background: #c82333;
-                }}
-                .modal {{
-                    display: none;
-                    position: fixed;
-                    z-index: 1000;
-                    left: 0;
-                    top: 0;
-                    width: 100%;
-                    height: 100%;
-                    background-color: rgba(0,0,0,0.5);
-                }}
-                .modal-content {{
-                    background-color: white;
-                    margin: 10% auto;
-                    padding: 20px;
-                    border-radius: 10px;
-                    width: 60%;
-                    max-width: 600px;
-                }}
-                .close {{
-                    color: #aaa;
-                    float: right;
-                    font-size: 28px;
-                    font-weight: bold;
-                    cursor: pointer;
-                }}
-                .close:hover {{
-                    color: black;
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>🔐 Identity-Aware Proxy Dashboard</h1>
-                    <p>Framework 3 - IAP Model with Separate Document Service</p>
-                </div>
-                
-                <div class="user-info">
-                    <h3>👤 User Information</h3>
-                    <p><strong>Username:</strong> {user.get('username', 'Unknown')}</p>
-                    <p><strong>Clearance:</strong> <span class="doc-class" style="background: #9C27B0; color: white;">{user.get('clearance', 'BASIC')}</span></p>
-                    <p><strong>Department:</strong> {user.get('department', 'general')}</p>
-                    <button class="logout-btn" onclick="logout()">Logout</button>
-                </div>
-                
-                <div class="documents">
-                    <h3>📄 Available Documents</h3>
-                    <div id="doc-list">Loading documents...</div>
-                </div>
-            </div>
-            
-            <div id="doc-modal" class="modal">
-                <div class="modal-content">
-                    <span class="close">&times;</span>
-                    <h3 id="modal-title"></h3>
-                    <p id="modal-classification"></p>
-                    <hr>
-                    <p id="modal-content" style="white-space: pre-wrap;"></p>
-                </div>
-            </div>
-            
-            <script>
-                const API_URL = '/api/v1';
-                
-                async function loadDocuments() {{
-                    try {{
-                        const response = await fetch(`${{API_URL}}/documents`);
-                        const data = await response.json();
-                        
-                        if (data.documents && data.documents.length > 0) {{
-                            const docList = document.getElementById('doc-list');
-                            docList.innerHTML = '';
-                            
-                            data.documents.forEach(doc => {{
-                                const docCard = document.createElement('div');
-                                docCard.className = 'doc-card';
-                                docCard.onclick = () => viewDocument(doc.id);
-                                
-                                let classColor = '#4CAF50';
-                                let className = 'BASIC';
-                                if (doc.classification === 'CONFIDENTIAL') {{ classColor = '#FF9800'; className = 'CONFIDENTIAL'; }}
-                                if (doc.classification === 'SECRET') {{ classColor = '#f44336'; className = 'SECRET'; }}
-                                if (doc.classification === 'TOP_SECRET') {{ classColor = '#9C27B0'; className = 'TOP_SECRET'; }}
-                                
-                                docCard.innerHTML = `
-                                    <div class="doc-title">
-                                        ${{doc.title}}
-                                        <span class="doc-class" style="background: ${{classColor}}; color: white;">
-                                            ${{className}}
-                                        </span>
-                                    </div>
-                                    <div style="font-size: 12px; color: #666; margin-top: 5px;">Department: ${{doc.department}}</div>
-                                `;
-                                docList.appendChild(docCard);
-                            }});
-                        }} else {{
-                            document.getElementById('doc-list').innerHTML = '<p>No documents available with your clearance level.</p>';
-                        }}
-                    }} catch (error) {{
-                        console.error('Error loading documents:', error);
-                        document.getElementById('doc-list').innerHTML = '<p>Error loading documents. Make sure services are running.</p>';
-                    }}
-                }}
-                
-                async function viewDocument(docId) {{
-                    try {{
-                        const response = await fetch(`${{API_URL}}/documents/${{docId}}`);
-                        const doc = await response.json();
-                        
-                        document.getElementById('modal-title').textContent = doc.title;
-                        document.getElementById('modal-classification').innerHTML = 
-                            `<strong>Classification:</strong> ${{doc.classification}} | <strong>Department:</strong> ${{doc.department}}`;
-                        document.getElementById('modal-content').textContent = doc.content;
-                        
-                        document.getElementById('doc-modal').style.display = 'block';
-                    }} catch (error) {{
-                        console.error('Error loading document:', error);
-                        alert('Error loading document: ' + error.message);
-                    }}
-                }}
-                
-                function logout() {{
-                    window.location.href = '/login';
-                }}
-                
-                // Modal close functionality
-                const modal = document.getElementById('doc-modal');
-                const closeBtn = document.getElementsByClassName('close')[0];
-                
-                closeBtn.onclick = function() {{
-                    modal.style.display = 'none';
-                }}
-                
-                window.onclick = function(event) {{
-                    if (event.target == modal) {{
-                        modal.style.display = 'none';
-                    }}
-                }}
-                
-                // Load documents on page load
-                loadDocuments();
-            </script>
-        </body>
-        </html>
-        '''
     
     def run(self):
         """Start the IAP proxy server"""

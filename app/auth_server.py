@@ -5,6 +5,9 @@ import sqlite3
 import os
 from datetime import datetime, timedelta, timezone
 
+# Use the SAME secret across all services
+JWT_SECRET = "iap-shared-secret-framework3-2025"
+
 class AuthServer:
     """Authentication Service - OIDC/OAuth2 compatible"""
     
@@ -13,7 +16,8 @@ class AuthServer:
         CORS(self.app, origins=['https://localhost:8443', 'https://localhost:8501', 'https://localhost:8502', 'https://localhost:8503'])
         self.port = port
         
-        self.jwt_secret = os.environ.get('JWT_SECRET', 'iap-shared-secret-change-this-in-production')
+        # Use the same secret as other services
+        self.jwt_secret = JWT_SECRET
         
         self._init_database()
         self._setup_routes()
@@ -38,15 +42,15 @@ class AuthServer:
         
         # Insert sample users
         sample_users = [
-            ('intelligence_officer', 'pass123', 'TOP_SECRET', 'intelligence', 'sarah.chen@intelligence.gov.bd'),
-            ('defense_staff', 'pass123', 'SECRET', 'defense', 'james.bond@defense.gov.bd'),
-            ('general_user', 'pass123', 'BASIC', 'general', 'john.doe@gov.bd')
+            (1, 'intelligence_officer', 'pass123', 'TOP_SECRET', 'intelligence', 'sarah.chen@intelligence.gov.bd'),
+            (2, 'defense_staff', 'pass123', 'SECRET', 'defense', 'james.bond@defense.gov.bd'),
+            (3, 'general_user', 'pass123', 'BASIC', 'general', 'john.doe@gov.bd')
         ]
         
         for user in sample_users:
             cursor.execute('''
-                INSERT OR IGNORE INTO users (username, password, clearance, department, email)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT OR IGNORE INTO users (id, username, password, clearance, department, email)
+                VALUES (?, ?, ?, ?, ?, ?)
             ''', user)
         
         conn.commit()
@@ -59,7 +63,12 @@ class AuthServer:
         def login():
             """Password-based login"""
             if request.method == 'OPTIONS':
-                return '', 200
+                response = jsonify({})
+                response.headers['Access-Control-Allow-Origin'] = 'https://localhost:8443'
+                response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+                response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+                return response, 200
             
             data = request.json
             username = data.get('username')
@@ -99,7 +108,12 @@ class AuthServer:
         def manual_auth():
             """Manual authentication for demo"""
             if request.method == 'OPTIONS':
-                return '', 200
+                response = jsonify({})
+                response.headers['Access-Control-Allow-Origin'] = 'https://localhost:8443'
+                response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+                response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+                return response, 200
             
             data = request.json
             user_data = {
@@ -120,13 +134,14 @@ class AuthServer:
         @self.app.route('/health', methods=['GET', 'OPTIONS'])
         def health():
             if request.method == 'OPTIONS':
-                return '', 200
+                response = jsonify({})
+                response.headers['Access-Control-Allow-Origin'] = 'https://localhost:8443'
+                return response, 200
             return jsonify({'status': 'healthy', 'service': 'Auth Server'})
     
     def _generate_auth_token(self, user_data):
-        """Generate authentication token"""
+        """Generate authentication token with consistent secret"""
         payload = {
-            'sub': user_data['username'],
             'user_id': user_data['user_id'],
             'username': user_data['username'],
             'clearance': user_data['clearance'],
@@ -148,3 +163,9 @@ class AuthServer:
             threaded=True,
             use_reloader=False
         )
+
+
+# For direct testing
+if __name__ == "__main__":
+    server = AuthServer(port=8501)
+    server.run()

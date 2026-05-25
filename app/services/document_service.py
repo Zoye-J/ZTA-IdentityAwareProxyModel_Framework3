@@ -11,6 +11,9 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from app.crypto.rsa_aes import RSA_AES_Encryptor
 
+# Use the SAME secret across all services
+JWT_SECRET = "iap-shared-secret-framework3-2025"
+
 class DocumentService:
     """Standalone Document Service with RSA+AES encryption"""
     
@@ -18,8 +21,8 @@ class DocumentService:
         self.app = Flask(__name__)
         self.port = port
         
-        # JWT configuration (shared secret with IAP)
-        self.jwt_secret = os.environ.get('JWT_SECRET', 'iap-shared-secret-change-this-in-production')
+        # Use the same secret as other services
+        self.jwt_secret = JWT_SECRET
         
         # Check if RSA keys exist, generate if not
         if not os.path.exists('keys/private_key.pem') or not os.path.exists('keys/public_key.pem'):
@@ -37,6 +40,27 @@ class DocumentService:
         # Initialize database
         self._init_database()
         self._setup_routes()
+    
+    def _verify_jwt(self):
+        """Verify JWT from IAP proxy"""
+        token = request.headers.get('X-IAP-JWT-Assertion', '')
+        if not token:
+            token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        
+        if not token:
+            return None
+        
+        try:
+            payload = jwt.decode(token, self.jwt_secret, algorithms=['HS256'],
+                                options={'verify_aud': False})
+            print(f"✅ Document Service: JWT verified for user: {payload.get('username')}")
+            return payload
+        except jwt.ExpiredSignatureError:
+            print("❌ Document Service: JWT expired")
+            return None
+        except jwt.InvalidTokenError as e:
+            print(f"❌ Document Service: JWT verification failed - {e}")
+            return None
     
     def _init_database(self):
         """Initialize SQLite database with encrypted documents"""
@@ -102,22 +126,7 @@ class DocumentService:
         
         conn.close()
     
-    def _verify_jwt(self):
-        """Verify JWT from IAP proxy"""
-        token = request.headers.get('X-IAP-JWT-Assertion', '')
-        if not token:
-            token = request.headers.get('Authorization', '').replace('Bearer ', '')
-        
-        if not token:
-            return None
-        
-        try:
-            payload = jwt.decode(token, self.jwt_secret, algorithms=['HS256'],
-                                options={'verify_aud': False})
-            return payload
-        except Exception as e:
-            print(f"Document Service - JWT verification error: {e}")
-            return None
+
     
     def _require_auth(self, f):
         """Decorator to verify JWT from IAP"""

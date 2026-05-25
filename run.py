@@ -9,7 +9,6 @@ import sys
 import time
 import threading
 import webbrowser
-import subprocess
 
 # Add app to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -112,7 +111,7 @@ def main():
     
     print("\n📡 Starting services...")
     
-    # Start services in order (disable debug mode)
+    # Start services in order
     
     # 1. Document Service (Port 8503)
     doc_service = DocumentService(port=8503)
@@ -121,6 +120,7 @@ def main():
     doc_thread = threading.Thread(target=doc_service.run, daemon=True)
     doc_thread.start()
     threads.append(doc_thread)
+    print("🚀 Document Service started on port 8503")
     time.sleep(2)
     
     # 2. API Gateway (Port 8502)
@@ -130,6 +130,7 @@ def main():
     api_thread = threading.Thread(target=api_service.run, daemon=True)
     api_thread.start()
     threads.append(api_thread)
+    print("🚀 API Gateway started on port 8502")
     time.sleep(1)
     
     # 3. Auth Server (Port 8501)
@@ -139,6 +140,7 @@ def main():
     auth_thread = threading.Thread(target=auth_service.run, daemon=True)
     auth_thread.start()
     threads.append(auth_thread)
+    print("🚀 Auth Server started on port 8501")
     time.sleep(1)
     
     # 4. IAP Proxy (Port 8443)
@@ -148,18 +150,19 @@ def main():
     iap_thread = threading.Thread(target=iap_service.run, daemon=True)
     iap_thread.start()
     threads.append(iap_thread)
+    print("🚀 IAP Proxy started on port 8443")
     time.sleep(2)
     
     print("\n" + "=" * 60)
     print("✅ ALL SERVICES RUNNING")
     print("=" * 60)
     print(f"""
+          Login - https://localhost:8443/login
     🌐 IAP PROXY (Main Entry):     https://localhost:8443
     🔐 Auth Server:                https://localhost:8501
     🔀 API Gateway:                https://localhost:8502
     📄 Document Service:           https://localhost:8503
-    
-   
+
     """)
     
     # Open browser automatically
