@@ -5,8 +5,8 @@ import os
 from functools import wraps
 import sys
 
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+# Use the SAME secret across all services
+JWT_SECRET = "iap-shared-secret-framework3-2025"
 
 class APIGatewayService:
     """Lightweight API Gateway that routes to document service"""
@@ -15,8 +15,8 @@ class APIGatewayService:
         self.app = Flask(__name__)
         self.port = port
         
-        # JWT configuration (shared secret with IAP)
-        self.jwt_secret = os.environ.get('JWT_SECRET', 'iap-shared-secret')
+        # Use the same secret as other services
+        self.jwt_secret = JWT_SECRET
         
         # Document service URL
         self.document_service_url = "https://localhost:8503"
@@ -25,9 +25,14 @@ class APIGatewayService:
     
     def _verify_jwt(self):
         """Verify JWT from IAP proxy"""
+        # Log all headers for debugging
+        print(f"🔍 API Gateway Headers received: {dict(request.headers)}")
+        
         token = request.headers.get('X-IAP-JWT-Assertion', '')
         if not token:
             token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        
+        print(f"🔍 API Gateway Token: {token[:50] if token else 'NO TOKEN'}...")
         
         if not token:
             return None
@@ -35,15 +40,23 @@ class APIGatewayService:
         try:
             payload = jwt.decode(token, self.jwt_secret, algorithms=['HS256'],
                                 options={'verify_aud': False})
+            print(f"✅ API Gateway: JWT verified for user: {payload.get('username')}")
             return payload
+        except jwt.ExpiredSignatureError:
+            print("❌ API Gateway: JWT expired")
+            return None
+        except jwt.InvalidTokenError as e:
+            print(f"❌ API Gateway: JWT invalid - {e}")
+            return None
         except Exception as e:
-            print(f"API Gateway - JWT verification error: {e}")
+            print(f"❌ API Gateway: Unexpected error - {e}")
             return None
     
     def _require_auth(self, f):
         """Decorator to verify JWT"""
         @wraps(f)
         def decorated(*args, **kwargs):
+            print(f"🔍 API Gateway: Request to {request.path}")
             user = self._verify_jwt()
             if not user:
                 return jsonify({'error': 'Unauthorized - Valid JWT required'}), 401
@@ -61,6 +74,9 @@ class APIGatewayService:
             'Content-Type': 'application/json'
         }
         
+        print(f"🔍 API Gateway: Proxying to {url}")
+        print(f"🔍 API Gateway: Forwarding token: {headers['X-IAP-JWT-Assertion'][:50] if headers['X-IAP-JWT-Assertion'] else 'NO TOKEN'}...")
+        
         try:
             if method == 'GET':
                 response = requests.get(url, headers=headers, verify=False)
@@ -69,8 +85,10 @@ class APIGatewayService:
             else:
                 response = requests.get(url, headers=headers, verify=False)
             
+            print(f"✅ API Gateway: Response status {response.status_code}")
             return response.json(), response.status_code
         except requests.exceptions.RequestException as e:
+            print(f"❌ API Gateway: Proxy error - {e}")
             return {'error': f'Document service error: {str(e)}'}, 502
     
     def _setup_routes(self):
@@ -132,6 +150,7 @@ class APIGatewayService:
             host='127.0.0.1',
             port=self.port,
             ssl_context=('certs/api.crt', 'certs/api.key'),
-            debug=False,  # Changed to Falseue,
+            debug=False,
+            threaded=True,
             use_reloader=False 
         )

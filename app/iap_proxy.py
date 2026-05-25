@@ -44,19 +44,23 @@ class IAPProxy:
             
             if not jwt_token and session.get('jwt'):
                 jwt_token = session.get('jwt')
+                print(f"🔍 IAP Proxy: Using token from session")
             
             if not jwt_token:
                 # Redirect to login
+                print(f"🔍 IAP Proxy: No token, redirecting to login")
                 return redirect(f'/login?redirect_url={request.url}')
             
             # Validate JWT
             validation = self._validate_jwt(jwt_token)
             if not validation['valid']:
+                print(f"🔍 IAP Proxy: Invalid token")
                 return jsonify({'error': 'Invalid or expired token'}), 401
             
             # Inject user info into request context
             request.user = validation['payload']
             request.jwt_token = jwt_token
+            print(f"🔍 IAP Proxy: User {request.user.get('username')} authenticated")
             
             return None
         
@@ -82,6 +86,7 @@ class IAPProxy:
             token = request.args.get('token')
             if token:
                 session['jwt'] = token
+                print(f"🔍 IAP Proxy: Token stored in session")
                 redirect_url = request.args.get('redirect_url', '/dashboard')
                 return redirect(redirect_url)
             
@@ -91,22 +96,31 @@ class IAPProxy:
         def dashboard():
             """Dashboard - serve HTML template with user data"""
             if not hasattr(request, 'user'):
+                print(f"🔍 IAP Proxy: No user in request, redirecting to login")
                 return redirect('/login')
             
+            print(f"🔍 IAP Proxy: Rendering dashboard for {request.user.get('username')}")
             return render_template('dashboard.html', user_data=request.user)
         
         @self.app.route('/api/v1/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
         def proxy_api(path):
             """Proxy API requests to API Gateway"""
             if not hasattr(request, 'user'):
+                print(f"🔍 IAP Proxy: No user in request for API call")
                 return jsonify({'error': 'Unauthorized'}), 401
             
             url = f"{self.api_gateway_url}/api/v1/{path}"
             
-            headers = dict(request.headers)
-            headers['X-IAP-JWT-Assertion'] = request.jwt_token
-            headers['X-User-Clearance'] = request.user.get('clearance', '')
-            headers['X-User-Department'] = request.user.get('department', '')
+            # IMPORTANT: Forward the JWT token in the header
+            headers = {
+                'X-IAP-JWT-Assertion': request.jwt_token,
+                'X-User-Clearance': request.user.get('clearance', ''),
+                'X-User-Department': request.user.get('department', ''),
+                'Content-Type': 'application/json'
+            }
+            
+            print(f"🔍 IAP Proxy: Proxying to {url}")
+            print(f"🔍 IAP Proxy: Forwarding token: {request.jwt_token[:50]}...")
             
             try:
                 response = requests.request(
@@ -118,12 +132,14 @@ class IAPProxy:
                     verify=False
                 )
                 
+                print(f"✅ IAP Proxy: Response status {response.status_code}")
                 return Response(
                     response.content,
                     status=response.status_code,
                     headers=dict(response.headers)
                 )
             except requests.exceptions.RequestException as e:
+                print(f"❌ IAP Proxy: Proxy error - {e}")
                 return jsonify({'error': f'Proxy error: {str(e)}'}), 502
         
         @self.app.route('/health')

@@ -47,6 +47,9 @@ class DocumentService:
         if not token:
             token = request.headers.get('Authorization', '').replace('Bearer ', '')
         
+        print(f"🔍 Document Service Headers: {dict(request.headers)}")
+        print(f"🔍 Document Service Token: {token[:50] if token else 'NO TOKEN'}...")
+        
         if not token:
             return None
         
