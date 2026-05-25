@@ -1,4 +1,4 @@
-from flask import Flask, request, Response, jsonify, session, redirect
+from flask import Flask, request, Response, jsonify, session, redirect, send_from_directory
 import requests
 import jwt
 import os
@@ -9,7 +9,7 @@ class IAPProxy:
     """Identity-Aware Proxy - The main gatekeeper"""
     
     def __init__(self, port=8443):
-        self.app = Flask(__name__)
+        self.app = Flask(__name__, template_folder='templates')
         self.app.secret_key = os.environ.get('FLASK_SECRET', 'iap-proxy-secret')
         self.port = port
         
@@ -18,7 +18,7 @@ class IAPProxy:
         self.api_gateway_url = "https://localhost:8502"
         
         # JWT configuration
-        self.jwt_secret = os.environ.get('JWT_SECRET', 'iap-shared-secret')
+        self.jwt_secret = os.environ.get('JWT_SECRET', 'iap-shared-secret-change-this-in-production')
         self.algorithm = 'HS256'
         
         self._setup_routes()
@@ -29,8 +29,8 @@ class IAPProxy:
         @self.app.before_request
         def check_auth():
             """IAP intercepts ALL requests before routing"""
-            # Skip authentication for login page and static assets
-            if request.path in ['/', '/login', '/callback', '/health']:
+            # Skip authentication for login, callback, health, and static files
+            if request.path in ['/', '/login', '/callback', '/health', '/favicon.ico']:
                 return None
             
             # Check for JWT token
@@ -70,9 +70,15 @@ class IAPProxy:
         
         @self.app.route('/login')
         def login():
-            """Login page"""
+            """Login page - serve HTML"""
             redirect_url = request.args.get('redirect_url', '/dashboard')
-            return self._render_login_page(redirect_url)
+            
+            # Read the HTML file
+            template_path = os.path.join(os.path.dirname(__file__), 'templates', 'login.html')
+            with open(template_path, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+            
+            return html_content
         
         @self.app.route('/callback')
         def callback():
@@ -149,164 +155,6 @@ class IAPProxy:
         except jwt.InvalidTokenError as e:
             return {'valid': False, 'error': str(e)}
     
-    def _render_login_page(self, redirect_url):
-        """Render login page"""
-        return f'''
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>IAP Login - Identity-Aware Proxy</title>
-            <style>
-                body {{
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    height: 100vh;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    margin: 0;
-                }}
-                .login-container {{
-                    background: white;
-                    padding: 40px;
-                    border-radius: 10px;
-                    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-                    width: 400px;
-                }}
-                h1 {{
-                    color: #333;
-                    margin-bottom: 10px;
-                    text-align: center;
-                }}
-                .subtitle {{
-                    color: #666;
-                    margin-bottom: 30px;
-                    text-align: center;
-                    font-size: 14px;
-                }}
-                .user-card {{
-                    border: 1px solid #ddd;
-                    border-radius: 8px;
-                    padding: 15px;
-                    margin: 10px 0;
-                    cursor: pointer;
-                    transition: all 0.3s;
-                }}
-                .user-card:hover {{
-                    background: #f5f5f5;
-                    border-color: #667eea;
-                    transform: translateX(5px);
-                }}
-                .user-name {{
-                    font-weight: bold;
-                    color: #333;
-                }}
-                .user-clearance {{
-                    font-size: 12px;
-                    color: #666;
-                    margin-top: 5px;
-                }}
-                .badge {{
-                    display: inline-block;
-                    padding: 2px 8px;
-                    border-radius: 4px;
-                    font-size: 10px;
-                    font-weight: bold;
-                    margin-left: 8px;
-                }}
-                .badge-basic {{ background: #4CAF50; color: white; }}
-                .badge-confidential {{ background: #FF9800; color: white; }}
-                .badge-secret {{ background: #f44336; color: white; }}
-                .badge-top_secret {{ background: #9C27B0; color: white; }}
-                .btn-login {{
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    border: none;
-                    padding: 12px;
-                    border-radius: 5px;
-                    font-size: 16px;
-                    cursor: pointer;
-                    width: 100%;
-                    margin-top: 10px;
-                }}
-                .btn-login:hover {{
-                    opacity: 0.9;
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="login-container">
-                <h1>🔐 IAP Login</h1>
-                <div class="subtitle">Identity-Aware Proxy - Zero Trust Access</div>
-                
-                <div id="users">
-                    <div class="user-card" onclick="loginAs('intelligence_officer', 'TOP_SECRET', 'intelligence')">
-                        <div class="user-name">Sarah Chen <span class="badge badge-top_secret">TOP_SECRET</span></div>
-                        <div class="user-clearance">Intelligence Department</div>
-                    </div>
-                    <div class="user-card" onclick="loginAs('defense_staff', 'SECRET', 'defense')">
-                        <div class="user-name">James Bond <span class="badge badge-secret">SECRET</span></div>
-                        <div class="user-clearance">Defense Department</div>
-                    </div>
-                    <div class="user-card" onclick="loginAs('general_user', 'BASIC', 'general')">
-                        <div class="user-name">John Doe <span class="badge badge-basic">BASIC</span></div>
-                        <div class="user-clearance">General Department</div>
-                    </div>
-                </div>
-                
-                <button class="btn-login" onclick="manualLogin()">Login with Credentials</button>
-            </div>
-            
-            <script>
-                const REDIRECT_URL = '{redirect_url}';
-                const AUTH_URL = 'https://localhost:8501';
-                
-                async function loginAs(username, clearance, department) {{
-                    try {{
-                        const response = await fetch(`${{AUTH_URL}}/auth/manual`, {{
-                            method: 'POST',
-                            headers: {{ 'Content-Type': 'application/json' }},
-                            body: JSON.stringify({{ username, clearance, department }})
-                        }});
-                        
-                        const data = await response.json();
-                        if (data.token) {{
-                            window.location.href = `/callback?token=${{data.token}}&redirect_url=${{REDIRECT_URL}}`;
-                        }}
-                    }} catch (error) {{
-                        console.error('Login error:', error);
-                        alert('Login failed. Make sure auth server is running.');
-                    }}
-                }}
-                
-                async function manualLogin() {{
-                    const username = prompt('Enter username:');
-                    const password = prompt('Enter password:');
-                    if (username && password) {{
-                        try {{
-                            const response = await fetch(`${{AUTH_URL}}/auth/login`, {{
-                                method: 'POST',
-                                headers: {{ 'Content-Type': 'application/json' }},
-                                body: JSON.stringify({{ username, password }})
-                            }});
-                            
-                            const data = await response.json();
-                            if (data.token) {{
-                                window.location.href = `/callback?token=${{data.token}}&redirect_url=${{REDIRECT_URL}}`;
-                            }} else {{
-                                alert('Login failed: ' + (data.error || 'Unknown error'));
-                            }}
-                        }} catch (error) {{
-                            console.error('Login error:', error);
-                            alert('Login failed. Make sure auth server is running.');
-                        }}
-                    }}
-                }}
-            </script>
-        </body>
-        </html>
-        '''
-    
     def _render_dashboard_page(self):
         """Render dashboard"""
         user = getattr(request, 'user', {})
@@ -369,6 +217,18 @@ class IAPProxy:
                     border-radius: 4px;
                     margin-left: 10px;
                 }}
+                .logout-btn {{
+                    background: #dc3545;
+                    color: white;
+                    border: none;
+                    padding: 10px 20px;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    margin-top: 20px;
+                }}
+                .logout-btn:hover {{
+                    background: #c82333;
+                }}
                 .modal {{
                     display: none;
                     position: fixed;
@@ -411,6 +271,7 @@ class IAPProxy:
                     <p><strong>Username:</strong> {user.get('username', 'Unknown')}</p>
                     <p><strong>Clearance:</strong> <span class="doc-class" style="background: #9C27B0; color: white;">{user.get('clearance', 'BASIC')}</span></p>
                     <p><strong>Department:</strong> {user.get('department', 'general')}</p>
+                    <button class="logout-btn" onclick="logout()">Logout</button>
                 </div>
                 
                 <div class="documents">
@@ -425,7 +286,7 @@ class IAPProxy:
                     <h3 id="modal-title"></h3>
                     <p id="modal-classification"></p>
                     <hr>
-                    <p id="modal-content"></p>
+                    <p id="modal-content" style="white-space: pre-wrap;"></p>
                 </div>
             </div>
             
@@ -447,18 +308,19 @@ class IAPProxy:
                                 docCard.onclick = () => viewDocument(doc.id);
                                 
                                 let classColor = '#4CAF50';
-                                if (doc.classification === 'CONFIDENTIAL') classColor = '#FF9800';
-                                if (doc.classification === 'SECRET') classColor = '#f44336';
-                                if (doc.classification === 'TOP_SECRET') classColor = '#9C27B0';
+                                let className = 'BASIC';
+                                if (doc.classification === 'CONFIDENTIAL') {{ classColor = '#FF9800'; className = 'CONFIDENTIAL'; }}
+                                if (doc.classification === 'SECRET') {{ classColor = '#f44336'; className = 'SECRET'; }}
+                                if (doc.classification === 'TOP_SECRET') {{ classColor = '#9C27B0'; className = 'TOP_SECRET'; }}
                                 
                                 docCard.innerHTML = `
                                     <div class="doc-title">
                                         ${{doc.title}}
                                         <span class="doc-class" style="background: ${{classColor}}; color: white;">
-                                            ${{doc.classification}}
+                                            ${{className}}
                                         </span>
                                     </div>
-                                    <div class="user-clearance">Department: ${{doc.department}}</div>
+                                    <div style="font-size: 12px; color: #666; margin-top: 5px;">Department: ${{doc.department}}</div>
                                 `;
                                 docList.appendChild(docCard);
                             }});
@@ -486,6 +348,10 @@ class IAPProxy:
                         console.error('Error loading document:', error);
                         alert('Error loading document: ' + error.message);
                     }}
+                }}
+                
+                function logout() {{
+                    window.location.href = '/login';
                 }}
                 
                 // Modal close functionality
@@ -516,7 +382,7 @@ class IAPProxy:
             host='127.0.0.1',
             port=self.port,
             ssl_context=('certs/iap.crt', 'certs/iap.key'),
-            debug=False,  # Changed to False
+            debug=False,
             threaded=True,
-            use_reloader=False  # Add this
+            use_reloader=False
         )

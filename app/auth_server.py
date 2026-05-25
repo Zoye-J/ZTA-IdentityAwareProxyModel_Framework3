@@ -1,8 +1,8 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import jwt
 import sqlite3
 import os
-import secrets
 from datetime import datetime, timedelta, timezone
 
 class AuthServer:
@@ -10,9 +10,10 @@ class AuthServer:
     
     def __init__(self, port=8501):
         self.app = Flask(__name__)
+        CORS(self.app, origins=['https://localhost:8443', 'https://localhost:8501', 'https://localhost:8502', 'https://localhost:8503'])
         self.port = port
         
-        self.jwt_secret = os.environ.get('JWT_SECRET', 'iap-shared-secret')
+        self.jwt_secret = os.environ.get('JWT_SECRET', 'iap-shared-secret-change-this-in-production')
         
         self._init_database()
         self._setup_routes()
@@ -50,12 +51,16 @@ class AuthServer:
         
         conn.commit()
         conn.close()
+        print("✅ Auth Server: Database initialized")
     
     def _setup_routes(self):
         
-        @self.app.route('/auth/login', methods=['POST'])
+        @self.app.route('/auth/login', methods=['POST', 'OPTIONS'])
         def login():
             """Password-based login"""
+            if request.method == 'OPTIONS':
+                return '', 200
+            
             data = request.json
             username = data.get('username')
             password = data.get('password')
@@ -79,17 +84,23 @@ class AuthServer:
                 'email': user[4]
             }
             
-            # Generate JWT token for IAP
+            # Generate JWT token
             token = self._generate_auth_token(user_data)
             
-            return jsonify({
+            response = jsonify({
                 'token': token,
                 'user': user_data
             })
+            response.headers['Access-Control-Allow-Origin'] = 'https://localhost:8443'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            return response
         
-        @self.app.route('/auth/manual', methods=['POST'])
+        @self.app.route('/auth/manual', methods=['POST', 'OPTIONS'])
         def manual_auth():
             """Manual authentication for demo"""
+            if request.method == 'OPTIONS':
+                return '', 200
+            
             data = request.json
             user_data = {
                 'user_id': 999,
@@ -100,22 +111,16 @@ class AuthServer:
             }
             
             token = self._generate_auth_token(user_data)
-            return jsonify({'token': token, 'user': user_data})
+            
+            response = jsonify({'token': token, 'user': user_data})
+            response.headers['Access-Control-Allow-Origin'] = 'https://localhost:8443'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            return response
         
-        @self.app.route('/token', methods=['POST'])
-        def exchange_token():
-            """OAuth token exchange endpoint"""
-            code = request.json.get('code')
-            # In production, validate code against stored state
-            return jsonify({
-                'user_id': 1,
-                'username': 'authenticated_user',
-                'clearance': 'BASIC',
-                'department': 'general'
-            })
-        
-        @self.app.route('/health')
+        @self.app.route('/health', methods=['GET', 'OPTIONS'])
         def health():
+            if request.method == 'OPTIONS':
+                return '', 200
             return jsonify({'status': 'healthy', 'service': 'Auth Server'})
     
     def _generate_auth_token(self, user_data):
@@ -123,6 +128,7 @@ class AuthServer:
         payload = {
             'sub': user_data['username'],
             'user_id': user_data['user_id'],
+            'username': user_data['username'],
             'clearance': user_data['clearance'],
             'department': user_data['department'],
             'email': user_data['email'],
@@ -133,11 +139,12 @@ class AuthServer:
         return jwt.encode(payload, self.jwt_secret, algorithm='HS256')
     
     def run(self):
+        print(f"🔐 Auth Server starting on port {self.port}")
         self.app.run(
             host='127.0.0.1',
             port=self.port,
             ssl_context=('certs/iap.crt', 'certs/iap.key'),
-            debug=False, 
+            debug=False,
             threaded=True,
-            use_reloader=False  
+            use_reloader=False
         )
