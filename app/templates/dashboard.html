@@ -1,75 +1,200 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>IAP Dashboard</title>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Document Dashboard</title>
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        * {
             margin: 0;
-            padding: 20px;
-            background: #f5f5f5;
+            padding: 0;
+            box-sizing: border-box;
         }
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: #f0f4f0;
+            color: #1a2e1a;
         }
-        .container {
-            max-width: 1200px;
+        
+        .app-container {
+            max-width: 1280px;
             margin: 0 auto;
+            padding: 2rem;
         }
-        .user-info {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        
+        /* Header */
+        .header {
+            background: #ffffff;
+            border-radius: 1rem;
+            padding: 1.5rem 2rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid #e2e8e2;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
         }
-        .documents {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #1a3e1a;
+            margin-bottom: 0.25rem;
         }
-        .doc-card {
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 10px 0;
-            cursor: pointer;
-            transition: all 0.3s;
+        
+        .header p {
+            font-size: 0.875rem;
+            color: #6b8c6b;
         }
-        .doc-card:hover {
-            background: #f9f9f9;
-            border-color: #667eea;
-            transform: translateX(5px);
+        
+        /* User Info Card */
+        .user-card {
+            background: #ffffff;
+            border-radius: 1rem;
+            padding: 1.5rem 2rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid #e2e8e2;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 1rem;
         }
-        .doc-title {
-            font-weight: bold;
-            color: #333;
+        
+        .user-info h3 {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #6b8c6b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 1rem;
         }
-        .doc-class {
-            font-size: 12px;
+        
+        .info-row {
+            display: flex;
+            align-items: baseline;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+            flex-wrap: wrap;
+        }
+        
+        .info-label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #4a6e4a;
+            min-width: 90px;
+        }
+        
+        .info-value {
+            font-size: 0.875rem;
+            color: #1a3e1a;
+            font-weight: 500;
+        }
+        
+        .clearance-badge {
             display: inline-block;
-            padding: 2px 8px;
-            border-radius: 4px;
-            margin-left: 10px;
+            padding: 0.25rem 0.75rem;
+            border-radius: 2rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            background: #e8f5e8;
+            color: #2e7d32;
         }
+        
         .logout-btn {
-            background: #dc3545;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
+            background: #f5f7f5;
+            border: 1px solid #d4e0d4;
+            padding: 0.6rem 1.25rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #5a7a5a;
             cursor: pointer;
-            margin-top: 20px;
+            transition: all 0.2s;
         }
+        
         .logout-btn:hover {
-            background: #c82333;
+            background: #e8f0e8;
+            border-color: #b8ceb8;
+            color: #2e5c2e;
         }
+        
+        /* Documents Section */
+        .documents-section {
+            background: #ffffff;
+            border-radius: 1rem;
+            padding: 1.5rem 2rem;
+            border: 1px solid #e2e8e2;
+        }
+        
+        .section-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #6b8c6b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 1.25rem;
+        }
+        
+        .doc-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        
+        .doc-item {
+            background: #fafdfa;
+            border: 1px solid #e2ece2;
+            border-radius: 0.75rem;
+            padding: 1rem 1.25rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .doc-item:hover {
+            background: #f5f9f5;
+            border-color: #c0d8c0;
+            transform: translateX(4px);
+        }
+        
+        .doc-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .doc-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #1a3e1a;
+        }
+        
+        .doc-class-badge {
+            font-size: 0.7rem;
+            padding: 0.25rem 0.7rem;
+            border-radius: 2rem;
+            font-weight: 500;
+        }
+        
+        .class-top-secret { background: #e8f0e8; color: #2e5c2e; }
+        .class-secret { background: #e8f0e8; color: #2e5c2e; }
+        .class-confidential { background: #e8f0e8; color: #2e5c2e; }
+        .class-basic { background: #e8f0e8; color: #2e5c2e; }
+        
+        .doc-meta {
+            font-size: 0.75rem;
+            color: #7a9a7a;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: #8aa88a;
+            font-size: 0.875rem;
+        }
+        
+        /* Modal */
         .modal {
             display: none;
             position: fixed;
@@ -78,159 +203,266 @@
             top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0,0,0,0.5);
+            background-color: rgba(26, 46, 26, 0.4);
+            backdrop-filter: blur(4px);
         }
+        
         .modal-content {
-            background-color: white;
-            margin: 10% auto;
-            padding: 20px;
-            border-radius: 10px;
-            width: 60%;
-            max-width: 600px;
+            background: #ffffff;
+            margin: 5% auto;
+            max-width: 680px;
+            width: 90%;
+            border-radius: 1rem;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e2ece2;
+            animation: modalFadeIn 0.2s ease;
         }
-        .close {
-            color: #aaa;
-            float: right;
-            font-size: 28px;
-            font-weight: bold;
+        
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .modal-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid #e8efe8;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-header h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #1a3e1a;
+        }
+        
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
             cursor: pointer;
+            color: #8aa88a;
+            transition: color 0.2s;
         }
-        .close:hover {
-            color: black;
+        
+        .close-modal:hover {
+            color: #2e5c2e;
         }
-        .doc-content {
-            white-space: pre-wrap;
+        
+        .modal-body {
+            padding: 1.5rem;
+        }
+        
+        .doc-meta-info {
+            display: flex;
+            gap: 1.5rem;
+            margin-bottom: 1rem;
+            font-size: 0.8rem;
+            flex-wrap: wrap;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #e8efe8;
+        }
+        
+        .doc-meta-item {
+            display: flex;
+            gap: 0.5rem;
+            align-items: baseline;
+        }
+        
+        .doc-meta-label {
+            font-weight: 500;
+            color: #7a9a7a;
+        }
+        
+        .doc-meta-value {
+            color: #2a5c2a;
+            font-weight: 500;
+        }
+        
+        .doc-full-content {
             line-height: 1.6;
+            font-size: 0.9rem;
+            color: #2a3e2a;
+            white-space: pre-wrap;
+            margin-top: 1rem;
         }
-        .badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: bold;
+        
+        @media (max-width: 640px) {
+            .app-container { padding: 1rem; }
+            .header, .user-card, .documents-section { padding: 1rem 1.25rem; }
+            .info-row { flex-direction: column; gap: 0.25rem; }
+            .user-card { flex-direction: column; }
         }
-        .badge-top-secret { background: #9C27B0; color: white; }
-        .badge-secret { background: #f44336; color: white; }
-        .badge-confidential { background: #FF9800; color: white; }
-        .badge-basic { background: #4CAF50; color: white; }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="app-container">
+        <!-- Header -->
         <div class="header">
-            <h1>🔐 Identity-Aware Proxy Dashboard</h1>
-            <p>Framework 3 - IAP Model with Separate Document Service</p>
+            <h1>Secure Document Access</h1>
+            <p>Identity-Aware Proxy | Zero Trust Architecture</p>
         </div>
         
-        <div class="user-info" id="userInfo">
-            <h3>👤 User Information</h3>
-            <div id="userDetails">Loading...</div>
-            <button class="logout-btn" onclick="logout()">Logout</button>
+        <!-- User Information -->
+        <div class="user-card" id="userInfo">
+            <div class="user-info">
+                <h3>Session Information</h3>
+                <div class="info-row">
+                    <span class="info-label">User</span>
+                    <span class="info-value" id="usernameDisplay">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Clearance Level</span>
+                    <span class="info-value"><span id="clearanceBadge" class="clearance-badge">-</span></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Department</span>
+                    <span class="info-value" id="departmentDisplay">-</span>
+                </div>
+            </div>
+            <button class="logout-btn" id="logoutBtn">Sign Out</button>
         </div>
         
-        <div class="documents">
-            <h3>📄 Available Documents</h3>
-            <div id="doc-list">Loading documents...</div>
+        <!-- Documents Section -->
+        <div class="documents-section">
+            <div class="section-title">Authorized Documents</div>
+            <div id="docListContainer" class="doc-list">
+                <div class="empty-state">Loading documents...</div>
+            </div>
         </div>
     </div>
     
-    <div id="doc-modal" class="modal">
+    <!-- Document Modal -->
+    <div id="documentModal" class="modal">
         <div class="modal-content">
-            <span class="close">&times;</span>
-            <h3 id="modal-title"></h3>
-            <p id="modal-classification"></p>
-            <hr>
-            <p id="modal-content" class="doc-content"></p>
+            <div class="modal-header">
+                <h3 id="modalTitle">Document Details</h3>
+                <button class="close-modal" id="closeModalBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="doc-meta-info">
+                    <div class="doc-meta-item">
+                        <span class="doc-meta-label">Classification</span>
+                        <span class="doc-meta-value" id="modalClassification">-</span>
+                    </div>
+                    <div class="doc-meta-item">
+                        <span class="doc-meta-label">Department</span>
+                        <span class="doc-meta-value" id="modalDepartment">-</span>
+                    </div>
+                </div>
+                <div class="doc-full-content" id="modalContent">
+                    Loading content...
+                </div>
+            </div>
         </div>
     </div>
     
     <script>
-        // Properly escape JSON data from Flask
-        const userData = JSON.parse('{{ user_data | tojson | safe }}');
+        // Parse user data from server
+        let userData = null;
+        try {
+            userData = JSON.parse('{{ user_data | tojson | safe }}');
+        } catch (e) {
+            console.error('Failed to parse user data', e);
+        }
         
         const API_URL = '/api/v1';
         
         function displayUserInfo() {
-            const userDetails = document.getElementById('userDetails');
-            let badgeClass = 'badge-basic';
-            if (userData.clearance === 'TOP_SECRET') badgeClass = 'badge-top-secret';
-            else if (userData.clearance === 'SECRET') badgeClass = 'badge-secret';
-            else if (userData.clearance === 'CONFIDENTIAL') badgeClass = 'badge-confidential';
+            if (!userData) return;
             
-            userDetails.innerHTML = `
-                <p><strong>Username:</strong> ${userData.username || 'Unknown'}</p>
-                <p><strong>Clearance:</strong> <span class="badge ${badgeClass}">${userData.clearance || 'BASIC'}</span></p>
-                <p><strong>Department:</strong> ${userData.department || 'general'}</p>
-            `;
+            document.getElementById('usernameDisplay').textContent = userData.username || 'Unknown';
+            document.getElementById('departmentDisplay').textContent = userData.department || 'General';
+            
+            const clearance = userData.clearance || 'BASIC';
+            const clearanceDisplay = clearance === 'TOP_SECRET' ? 'TOP SECRET' : clearance;
+            const badgeSpan = document.getElementById('clearanceBadge');
+            badgeSpan.textContent = clearanceDisplay;
         }
         
-        async function loadDocuments() {
-            try {
-                const response = await fetch(`${API_URL}/documents`);
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                const data = await response.json();
-                
-                if (data.documents && data.documents.length > 0) {
-                    const docList = document.getElementById('doc-list');
-                    docList.innerHTML = '';
-                    
-                    data.documents.forEach(doc => {
-                        const docCard = document.createElement('div');
-                        docCard.className = 'doc-card';
-                        docCard.onclick = () => viewDocument(doc.id);
-                        
-                        let classColor = '#4CAF50';
-                        let className = 'BASIC';
-                        if (doc.classification === 'CONFIDENTIAL') { classColor = '#FF9800'; className = 'CONFIDENTIAL'; }
-                        if (doc.classification === 'SECRET') { classColor = '#f44336'; className = 'SECRET'; }
-                        if (doc.classification === 'TOP_SECRET') { classColor = '#9C27B0'; className = 'TOP_SECRET'; }
-                        
-                        docCard.innerHTML = `
-                            <div class="doc-title">
-                                ${escapeHtml(doc.title)}
-                                <span class="doc-class" style="background: ${classColor}; color: white;">
-                                    ${className}
-                                </span>
-                            </div>
-                            <div style="font-size: 12px; color: #666; margin-top: 5px;">Department: ${escapeHtml(doc.department)}</div>
-                        `;
-                        docList.appendChild(docCard);
-                    });
-                } else {
-                    document.getElementById('doc-list').innerHTML = '<p>No documents available with your clearance level.</p>';
-                }
-            } catch (error) {
-                console.error('Error loading documents:', error);
-                document.getElementById('doc-list').innerHTML = '<p>Error loading documents. Make sure services are running.</p>';
+        function getClassBadgeClass(classification) {
+            const baseClass = 'doc-class-badge';
+            switch(classification) {
+                case 'TOP_SECRET': return `${baseClass} class-top-secret`;
+                case 'SECRET': return `${baseClass} class-secret`;
+                case 'CONFIDENTIAL': return `${baseClass} class-confidential`;
+                default: return `${baseClass} class-basic`;
             }
         }
         
-        async function viewDocument(docId) {
+        function formatClassification(classification) {
+            switch(classification) {
+                case 'TOP_SECRET': return 'TOP SECRET';
+                default: return classification;
+            }
+        }
+        
+        async function loadDocuments() {
+            const container = document.getElementById('docListContainer');
+            container.innerHTML = '<div class="empty-state">Loading documents...</div>';
+            
             try {
-                const response = await fetch(`${API_URL}/documents/${docId}`);
+                const response = await fetch(`${API_URL}/documents`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const data = await response.json();
+                
+                if (data.documents && data.documents.length > 0) {
+                    container.innerHTML = '';
+                    data.documents.forEach(doc => {
+                        const docDiv = document.createElement('div');
+                        docDiv.className = 'doc-item';
+                        docDiv.setAttribute('data-doc-id', doc.id);
+                        docDiv.onclick = () => viewDocument(doc.id);
+                        
+                        docDiv.innerHTML = `
+                            <div class="doc-header">
+                                <span class="doc-title">${escapeHtml(doc.title)}</span>
+                                <span class="${getClassBadgeClass(doc.classification)}">${formatClassification(doc.classification)}</span>
+                            </div>
+                            <div class="doc-meta">Department: ${escapeHtml(doc.department)}</div>
+                        `;
+                        container.appendChild(docDiv);
+                    });
+                } else {
+                    container.innerHTML = '<div class="empty-state">No documents available with your clearance level</div>';
+                }
+            } catch (error) {
+                console.error('Load error:', error);
+                container.innerHTML = '<div class="empty-state">Unable to load documents. Please verify service connectivity.</div>';
+            }
+        }
+        
+        async function viewDocument(documentId) {
+            const modal = document.getElementById('documentModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalClassification = document.getElementById('modalClassification');
+            const modalDepartment = document.getElementById('modalDepartment');
+            const modalContent = document.getElementById('modalContent');
+            
+            modalTitle.textContent = 'Loading...';
+            modalClassification.textContent = '-';
+            modalDepartment.textContent = '-';
+            modalContent.textContent = 'Fetching document content...';
+            modal.style.display = 'block';
+            
+            try {
+                const response = await fetch(`${API_URL}/documents/${documentId}`);
                 if (!response.ok) {
                     const error = await response.json();
                     throw new Error(error.error || 'Failed to load document');
                 }
+                
                 const doc = await response.json();
                 
-                document.getElementById('modal-title').textContent = doc.title;
-                
-                let badgeClass = 'badge-basic';
-                if (doc.classification === 'TOP_SECRET') badgeClass = 'badge-top-secret';
-                else if (doc.classification === 'SECRET') badgeClass = 'badge-secret';
-                else if (doc.classification === 'CONFIDENTIAL') badgeClass = 'badge-confidential';
-                
-                document.getElementById('modal-classification').innerHTML = 
-                    `<strong>Classification:</strong> <span class="badge ${badgeClass}">${escapeHtml(doc.classification)}</span> | <strong>Department:</strong> ${escapeHtml(doc.department)}`;
-                document.getElementById('modal-content').textContent = doc.content;
-                
-                document.getElementById('doc-modal').style.display = 'block';
+                modalTitle.textContent = escapeHtml(doc.title);
+                modalClassification.textContent = formatClassification(doc.classification);
+                modalDepartment.textContent = escapeHtml(doc.department);
+                modalContent.textContent = doc.content || 'No content available';
             } catch (error) {
-                console.error('Error loading document:', error);
-                alert('Error loading document: ' + error.message);
+                modalTitle.textContent = 'Error';
+                modalContent.textContent = `Unable to load document: ${error.message}`;
             }
         }
         
@@ -245,21 +477,23 @@
             window.location.href = '/logout';
         }
         
-        // Modal close functionality
-        const modal = document.getElementById('doc-modal');
-        const closeBtn = document.getElementsByClassName('close')[0];
+        // Modal controls
+        const modal = document.getElementById('documentModal');
+        const closeBtn = document.getElementById('closeModalBtn');
         
         closeBtn.onclick = function() {
             modal.style.display = 'none';
-        }
+        };
         
         window.onclick = function(event) {
-            if (event.target == modal) {
+            if (event.target === modal) {
                 modal.style.display = 'none';
             }
-        }
+        };
         
-        // Initialize page
+        document.getElementById('logoutBtn').addEventListener('click', logout);
+        
+        // Initialize
         displayUserInfo();
         loadDocuments();
     </script>

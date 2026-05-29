@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>IAP Login - Identity-Aware Proxy</title>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Identity-Aware Proxy | Secure Access</title>
     <style>
         * {
             margin: 0;
@@ -11,179 +12,258 @@
         }
         
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: #f0f4f0;
             min-height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            margin: 0;
-            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
         }
         
-        .login-container {
-            background: white;
-            padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        .login-card {
+            background: #ffffff;
+            max-width: 440px;
             width: 100%;
-            max-width: 450px;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e2e8e2;
+        }
+        
+        .logo-section {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+        
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: #e8f5e8;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1rem;
+            color: #2e7d32;
+            font-weight: 600;
+            font-size: 24px;
         }
         
         h1 {
-            color: #333;
-            margin-bottom: 10px;
-            text-align: center;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #1a2e1a;
+            margin-bottom: 0.25rem;
         }
         
         .subtitle {
-            color: #666;
-            margin-bottom: 30px;
-            text-align: center;
-            font-size: 14px;
+            font-size: 0.875rem;
+            color: #5a6e5a;
+            margin-bottom: 1.5rem;
         }
         
-        .form-group {
-            margin-bottom: 20px;
+        .framework-badge {
+            background: #e8f5e8;
+            color: #2e5c2e;
+            font-size: 0.75rem;
+            padding: 0.5rem 1rem;
+            border-radius: 2rem;
+            text-align: center;
+            margin-bottom: 1.5rem;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+        }
+        
+        .input-group {
+            margin-bottom: 1.25rem;
         }
         
         label {
             display: block;
-            margin-bottom: 5px;
-            color: #333;
+            font-size: 0.875rem;
             font-weight: 500;
+            color: #2a3e2a;
+            margin-bottom: 0.5rem;
         }
         
         input {
             width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 14px;
-            transition: border-color 0.3s;
+            padding: 0.75rem 1rem;
+            font-size: 0.875rem;
+            border: 1px solid #cbdccb;
+            border-radius: 0.5rem;
+            background: #ffffff;
+            transition: all 0.2s ease;
+            font-family: inherit;
         }
         
         input:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: #4caf50;
+            box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
         }
         
-        .btn-login {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        .login-btn {
+            width: 100%;
+            padding: 0.75rem;
+            background: #4caf50;
             color: white;
             border: none;
-            padding: 12px;
-            border-radius: 5px;
-            font-size: 16px;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
             cursor: pointer;
-            width: 100%;
-            margin-top: 10px;
-            transition: opacity 0.3s;
+            transition: background 0.2s ease;
+            margin-top: 0.5rem;
+            font-family: inherit;
         }
         
-        .btn-login:hover {
-            opacity: 0.9;
+        .login-btn:hover {
+            background: #388e3c;
         }
         
         .error-message {
-            background: #ffebee;
+            background: #ffefef;
             color: #c62828;
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 20px;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            font-size: 0.75rem;
+            margin-bottom: 1rem;
             display: none;
-            font-size: 14px;
+            border-left: 3px solid #c62828;
         }
         
         .loading {
             display: none;
             text-align: center;
-            margin-top: 20px;
+            margin-top: 1rem;
         }
         
         .spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
+            width: 32px;
+            height: 32px;
+            border: 3px solid #e0e8e0;
+            border-top-color: #4caf50;
             border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 0.5rem;
         }
         
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            to { transform: rotate(360deg); }
         }
         
-        .info-box {
-            background: #e3f2fd;
-            color: #1976d2;
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            font-size: 12px;
+        .credentials-panel {
+            margin-top: 1.5rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e8efe8;
+        }
+        
+        .credentials-title {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #7a8e7a;
+            margin-bottom: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .credential-row {
+            font-size: 0.75rem;
+            padding: 0.5rem 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #f0f4f0;
+        }
+        
+        .credential-user {
+            font-family: 'Menlo', monospace;
+            font-weight: 500;
+            color: #2a5c2a;
+        }
+        
+        .credential-pass {
+            font-family: 'Menlo', monospace;
+            color: #6b8c6b;
+        }
+        
+        .credential-badge {
+            font-size: 0.65rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 1rem;
+            font-weight: 500;
+        }
+        
+        .badge-top-secret { background: #e8f0e8; color: #2e5c2e; }
+        .badge-secret { background: #e8f0e8; color: #2e5c2e; }
+        .badge-basic { background: #e8f0e8; color: #2e5c2e; }
+        
+        .footer-note {
+            font-size: 0.7rem;
+            color: #8aa08a;
             text-align: center;
+            margin-top: 1.5rem;
         }
         
-        .credentials-box {
-            margin-top: 20px;
-            padding: 15px;
-            background: #f5f5f5;
-            border-radius: 5px;
-            border-left: 4px solid #667eea;
-        }
-        
-        .credentials-box p {
-            font-size: 12px;
-            color: #666;
-            margin-bottom: 8px;
-        }
-        
-        .credentials-box .cred-row {
-            font-family: monospace;
-            font-size: 11px;
-            padding: 4px 0;
-            color: #333;
-        }
-        
-        .credentials-box strong {
-            color: #667eea;
+        @media (max-width: 480px) {
+            .login-card { padding: 1.5rem; }
         }
     </style>
 </head>
 <body>
-    <div class="login-container">
-        <h1>🔐 IAP Login</h1>
-        <div class="subtitle">Identity-Aware Proxy - Zero Trust Access</div>
+    <div class="login-card">
+        <div class="logo-section">
+            <div class="logo-icon">IAP</div>
+            <h1>Secure Access Portal</h1>
+            <div class="subtitle">Identity-Aware Proxy Authentication</div>
+        </div>
         
-        <div class="info-box">
-            🔐 Framework 3: IAP Model with RSA+AES Encryption
+        <div class="framework-badge">
+            Zero Trust Architecture | IAP Model Framework 
         </div>
         
         <div class="error-message" id="errorMessage"></div>
-        <div class="loading" id="loading">
-            <div class="spinner"></div>
-            <p style="margin-top: 10px;">Authenticating...</p>
-        </div>
         
-        <form id="loginForm" onsubmit="manualLogin(event)">
-            <div class="form-group">
+        <form id="loginForm">
+            <div class="input-group">
                 <label>Username</label>
-                <input type="text" id="username" placeholder="Enter username" autocomplete="off" required>
+                <input type="text" id="username" placeholder="Enter your username" autocomplete="off" required>
             </div>
-            <div class="form-group">
+            <div class="input-group">
                 <label>Password</label>
-                <input type="password" id="password" placeholder="Enter password" required>
+                <input type="password" id="password" placeholder="Enter your password" required>
             </div>
-            <button type="submit" class="btn-login">Login</button>
+            <button type="submit" class="login-btn">Sign In</button>
         </form>
         
-        <div class="credentials-box">
-            <p><strong>📝 Test Credentials:</strong></p>
-            <div class="cred-row">• <strong>intelligence_officer</strong> / pass123 <span style="color:#9C27B0;">(TOP_SECRET - Intelligence)</span></div>
-            <div class="cred-row">• <strong>defense_staff</strong> / pass123 <span style="color:#f44336;">(SECRET - Defense)</span></div>
-            <div class="cred-row">• <strong>general_user</strong> / pass123 <span style="color:#4CAF50;">(BASIC - General)</span></div>
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p style="font-size: 0.75rem; color: #6b8c6b;">Authenticating...</p>
+        </div>
+        
+        <div class="credentials-panel">
+            <div class="credentials-title">Test Access Credentials</div>
+            <div class="credential-row">
+                <span class="credential-user">intelligence_officer</span>
+                <span class="credential-pass">pass123</span>
+                <span class="credential-badge badge-top-secret">TOP SECRET</span>
+            </div>
+            <div class="credential-row">
+                <span class="credential-user">defense_staff</span>
+                <span class="credential-pass">pass123</span>
+                <span class="credential-badge badge-secret">SECRET</span>
+            </div>
+            <div class="credential-row">
+                <span class="credential-user">general_user</span>
+                <span class="credential-pass">pass123</span>
+                <span class="credential-badge badge-basic">BASIC</span>
+            </div>
+        </div>
+        
+        <div class="footer-note">
+            RSA+AES Encrypted Document Storage
         </div>
     </div>
     
@@ -191,70 +271,67 @@
         const AUTH_URL = 'https://localhost:8501';
         const REDIRECT_URL = new URLSearchParams(window.location.search).get('redirect_url') || '/dashboard';
         
+        const form = document.getElementById('loginForm');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const errorDiv = document.getElementById('errorMessage');
+        const loadingDiv = document.getElementById('loading');
+        
         function showError(message) {
-            const errorDiv = document.getElementById('errorMessage');
             errorDiv.textContent = message;
             errorDiv.style.display = 'block';
         }
         
         function hideError() {
-            const errorDiv = document.getElementById('errorMessage');
             errorDiv.style.display = 'none';
         }
         
-        function showLoading() {
-            document.getElementById('loading').style.display = 'block';
+        function setLoading(isLoading) {
+            loadingDiv.style.display = isLoading ? 'block' : 'none';
+            form.querySelector('.login-btn').disabled = isLoading;
         }
         
-        function hideLoading() {
-            document.getElementById('loading').style.display = 'none';
-        }
-        
-        async function manualLogin(event) {
+        async function handleLogin(event) {
             event.preventDefault();
             hideError();
-            showLoading();
             
-            const username = document.getElementById('username').value.trim();
-            const password = document.getElementById('password').value;
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value;
             
             if (!username || !password) {
-                showError('Please enter username and password');
-                hideLoading();
+                showError('Please enter both username and password');
                 return;
             }
+            
+            setLoading(true);
             
             try {
                 const response = await fetch(`${AUTH_URL}/auth/login`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
                 });
                 
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.error || 'Invalid credentials');
-                }
-                
                 const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Authentication failed');
+                }
                 
                 if (data.token) {
                     window.location.href = `/callback?token=${data.token}&redirect_url=${REDIRECT_URL}`;
                 } else {
-                    throw new Error('No token received');
+                    throw new Error('Invalid server response');
                 }
             } catch (error) {
-                console.error('Login error:', error);
-                showError('Login failed: ' + error.message);
-                hideLoading();
+                showError(error.message);
+                setLoading(false);
             }
         }
         
-        // Clear error when typing
-        document.getElementById('username').addEventListener('input', hideError);
-        document.getElementById('password').addEventListener('input', hideError);
+        form.addEventListener('submit', handleLogin);
+        usernameInput.addEventListener('input', hideError);
+        passwordInput.addEventListener('input', hideError);
     </script>
 </body>
 </html>
