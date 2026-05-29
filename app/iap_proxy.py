@@ -31,8 +31,9 @@ class IAPProxy:
         @self.app.before_request
         def check_auth():
             """IAP intercepts ALL requests before routing"""
-            # Skip authentication for login, callback, health, and static files
-            if request.path in ['/', '/login', '/callback', '/health', '/favicon.ico']:
+            # Skip authentication for root (login page), callback, health, and static files
+            # Also skip if user is already trying to login
+            if request.path in ['/', '/callback', '/health', '/favicon.ico']:
                 return None
             
             # Check for JWT token
@@ -44,41 +45,42 @@ class IAPProxy:
             
             if not jwt_token and session.get('jwt'):
                 jwt_token = session.get('jwt')
-                print(f"🔍 IAP Proxy: Using token from session")
             
             if not jwt_token:
-                # Redirect to login
-                print(f"🔍 IAP Proxy: No token, redirecting to login")
-                return redirect(f'/login?redirect_url={request.url}')
+                # Redirect to root (login page)
+                return redirect(f'/?redirect_url={request.url}')
             
             # Validate JWT
             validation = self._validate_jwt(jwt_token)
             if not validation['valid']:
-                print(f"🔍 IAP Proxy: Invalid token")
                 return jsonify({'error': 'Invalid or expired token'}), 401
             
             # Inject user info into request context
             request.user = validation['payload']
             request.jwt_token = jwt_token
-            print(f"🔍 IAP Proxy: User {request.user.get('username')} authenticated")
             
             return None
         
         @self.app.route('/')
         def index():
-            return jsonify({
-                'service': 'Identity-Aware Proxy (IAP)',
-                'status': 'running',
-                'version': '3.0',
-                'message': 'This is the IAP gatekeeper - all requests must pass through me',
-                'architecture': 'IAP + Separate Document Service'
-            })
-        
-        @self.app.route('/login')
-        def login():
-            """Login page - serve HTML template"""
+            """Root path - serves login page or redirects to dashboard if already authenticated"""
+            # Check if user is already authenticated via session
+            if session.get('jwt'):
+                jwt_token = session.get('jwt')
+                validation = self._validate_jwt(jwt_token)
+                if validation['valid']:
+                    # User is already logged in, redirect to dashboard
+                    return redirect('/dashboard')
+            
+            # Otherwise show login page
             redirect_url = request.args.get('redirect_url', '/dashboard')
             return render_template('login.html', redirect_url=redirect_url)
+        
+        @self.app.route('/login')
+        def login_redirect():
+            """Redirect old /login path to root"""
+            redirect_url = request.args.get('redirect_url', '/dashboard')
+            return redirect(f'/?redirect_url={redirect_url}')
         
         @self.app.route('/callback')
         def callback():
@@ -86,7 +88,6 @@ class IAPProxy:
             token = request.args.get('token')
             if token:
                 session['jwt'] = token
-                print(f"🔍 IAP Proxy: Token stored in session")
                 redirect_url = request.args.get('redirect_url', '/dashboard')
                 return redirect(redirect_url)
             
@@ -96,18 +97,37 @@ class IAPProxy:
         def dashboard():
             """Dashboard - serve HTML template with user data"""
             if not hasattr(request, 'user'):
-                print(f"🔍 IAP Proxy: No user in request, redirecting to login")
-                return redirect('/login')
+                # Check session for token
+                if session.get('jwt'):
+                    jwt_token = session.get('jwt')
+                    validation = self._validate_jwt(jwt_token)
+                    if validation['valid']:
+                        request.user = validation['payload']
+                        request.jwt_token = jwt_token
+                    else:
+                        session.pop('jwt', None)
+                        return redirect('/')
+                else:
+                    return redirect('/')
             
-            print(f"🔍 IAP Proxy: Rendering dashboard for {request.user.get('username')}")
             return render_template('dashboard.html', user_data=request.user)
         
         @self.app.route('/api/v1/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
         def proxy_api(path):
             """Proxy API requests to API Gateway"""
             if not hasattr(request, 'user'):
-                print(f"🔍 IAP Proxy: No user in request for API call")
-                return jsonify({'error': 'Unauthorized'}), 401
+                # Check session for token
+                if session.get('jwt'):
+                    jwt_token = session.get('jwt')
+                    validation = self._validate_jwt(jwt_token)
+                    if validation['valid']:
+                        request.user = validation['payload']
+                        request.jwt_token = jwt_token
+                    else:
+                        session.pop('jwt', None)
+                        return jsonify({'error': 'Unauthorized'}), 401
+                else:
+                    return jsonify({'error': 'Unauthorized'}), 401
             
             url = f"{self.api_gateway_url}/api/v1/{path}"
             
@@ -145,6 +165,12 @@ class IAPProxy:
         @self.app.route('/health')
         def health():
             return jsonify({'status': 'healthy', 'service': 'IAP Proxy'})
+        
+        @self.app.route('/logout')
+        def logout():
+            """Logout endpoint"""
+            session.pop('jwt', None)
+            return redirect('/')
     
     def _validate_jwt(self, token):
         """Validate JWT token"""
