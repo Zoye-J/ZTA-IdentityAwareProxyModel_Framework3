@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 
 # Use the SAME secret across all services
-JWT_SECRET = "iap-shared-secret-framework3-2025"
+
 
 class IAPProxy:
     """Identity-Aware Proxy - The main gatekeeper"""
@@ -135,31 +135,36 @@ class IAPProxy:
             # Add internal token for service-to-service auth
             headers = {
                 'X-IAP-JWT-Assertion': request.jwt_token,
-                'X-Internal-Token': INTERNAL_API_TOKEN,  # Add this line
+                'X-Internal-Token': INTERNAL_API_TOKEN,
                 'X-User-Clearance': request.user.get('clearance', ''),
                 'X-User-Department': request.user.get('department', ''),
                 'Content-Type': 'application/json'
             }
             
-            # Enable certificate verification
+            print(f"🔍 IAP Proxy: Proxying to {url}")
+            
+            # Use a session with SSL verification disabled for internal communication
             try:
-                response = requests.request(
+                # Create a session that ignores SSL verification for localhost
+                session = requests.Session()
+                session.verify = False
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                
+                response = session.request(
                     method=request.method,
                     url=url,
                     headers=headers,
                     data=request.get_data(),
-                    cookies=request.cookies,
-                    verify='certs/api.crt'  # Changed from False
+                    cookies=request.cookies
                 )
                 
+                print(f"✅ IAP Proxy: Response status {response.status_code}")
                 return Response(
                     response.content,
                     status=response.status_code,
                     headers=dict(response.headers)
                 )
-            except requests.exceptions.SSLError as e:
-                print(f"❌ IAP Proxy: SSL error - {e}")
-                return jsonify({'error': 'SSL verification failed'}), 500
             except requests.exceptions.RequestException as e:
                 print(f"❌ IAP Proxy: Proxy error - {e}")
                 return jsonify({'error': f'Proxy error: {str(e)}'}), 502

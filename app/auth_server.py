@@ -4,21 +4,38 @@ import jwt
 import sqlite3
 import os
 from datetime import datetime, timedelta, timezone
+from functools import wraps
 
-from app.middleware.internal_auth import require_internal_token, require_local_only
+from app.config import JWT_SECRET, INTERNAL_API_TOKEN
 
-# Use the SAME secret across all services
-JWT_SECRET = "iap-shared-secret-framework3-2025"
+def require_local_only(f):
+    """Decorator to restrict access to localhost only"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        client_ip = request.remote_addr
+        if client_ip not in ['127.0.0.1', 'localhost', None, '::1']:
+            return jsonify({'error': 'Access denied. This endpoint is internal only.'}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+def require_internal_token(f):
+    """Decorator to require internal API token"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('X-Internal-Token', '')
+        if token != INTERNAL_API_TOKEN:
+            return jsonify({'error': 'Unauthorized - Invalid internal token'}), 401
+        return f(*args, **kwargs)
+    return decorated
 
 class AuthServer:
-    """Authentication Service - OIDC/OAuth2 compatible"""
+    """Authentication Service - Internal only, accessible only via IAP proxy"""
     
     def __init__(self, port=8501):
         self.app = Flask(__name__)
-        CORS(self.app, origins=['https://localhost:8443', 'https://localhost:8501', 'https://localhost:8502', 'https://localhost:8503'])
+        # Only allow IAP proxy (localhost) to access
+        CORS(self.app, origins=['https://localhost:8443'])
         self.port = port
-        
-        # Use the same secret as other services
         self.jwt_secret = JWT_SECRET
         
         self._init_database()

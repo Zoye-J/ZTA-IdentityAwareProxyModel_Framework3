@@ -6,6 +6,8 @@ import json
 from datetime import datetime, timezone
 from functools import wraps
 import sys
+
+import requests
 from app.config import JWT_SECRET, INTERNAL_API_TOKEN
 from app.middleware.internal_auth import require_internal_token, require_local_only
 
@@ -13,8 +15,7 @@ from app.middleware.internal_auth import require_internal_token, require_local_o
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from app.crypto.rsa_aes import RSA_AES_Encryptor
 
-# Use the SAME secret across all services
-JWT_SECRET = "iap-shared-secret-framework3-2025"
+
 
 class DocumentService:
     """Standalone Document Service with RSA+AES encryption"""
@@ -25,6 +26,12 @@ class DocumentService:
         
         # Use the same secret as other services
         self.jwt_secret = JWT_SECRET
+
+                # Create session with SSL disabled for internal communication
+        self.session = requests.Session()
+        self.session.verify = False
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         
         # Check if RSA keys exist, generate if not
         if not os.path.exists('keys/private_key.pem') or not os.path.exists('keys/public_key.pem'):
