@@ -5,6 +5,8 @@ import sqlite3
 import os
 from datetime import datetime, timedelta, timezone
 
+from app.middleware.internal_auth import require_internal_token, require_local_only
+
 # Use the SAME secret across all services
 JWT_SECRET = "iap-shared-secret-framework3-2025"
 
@@ -132,6 +134,8 @@ class AuthServer:
             return response
         
         @self.app.route('/health', methods=['GET', 'OPTIONS'])
+        @require_internal_token
+        @require_local_only
         def health():
             if request.method == 'OPTIONS':
                 response = jsonify({})

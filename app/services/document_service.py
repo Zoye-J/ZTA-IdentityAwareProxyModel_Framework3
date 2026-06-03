@@ -6,6 +6,8 @@ import json
 from datetime import datetime, timezone
 from functools import wraps
 import sys
+from app.config import JWT_SECRET, INTERNAL_API_TOKEN
+from app.middleware.internal_auth import require_internal_token, require_local_only
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -135,9 +137,15 @@ class DocumentService:
         conn.close()
     
     def _require_auth(self, f):
-        """Decorator to verify JWT from IAP"""
+        """Decorator to verify JWT from IAP AND internal token"""
         @wraps(f)
         def decorated(*args, **kwargs):
+            # Verify internal token first (prevents direct access)
+            internal_token = request.headers.get('X-Internal-Token', '')
+            if internal_token != INTERNAL_API_TOKEN:
+                print("❌ Document Service: Invalid or missing internal token")
+                return jsonify({'error': 'Unauthorized - Internal service only'}), 401
+            
             user = self._verify_jwt()
             if not user:
                 return jsonify({'error': 'Unauthorized - Valid JWT required'}), 401
@@ -186,7 +194,12 @@ class DocumentService:
     def _setup_routes(self):
         """Setup document service routes"""
         
+        @self.app.before_request
+        def log_request():
+            print(f"🔍 Document Service: Request from {request.remote_addr} to {request.path}")
+        
         @self.app.route('/documents', methods=['GET'])
+        @require_local_only
         @self._require_auth
         def get_documents():
             """List all documents user can access"""
@@ -198,7 +211,6 @@ class DocumentService:
             conn.close()
             
             accessible_docs = []
-            denied_docs = []
             
             for doc in all_docs:
                 doc_dict = {
@@ -208,18 +220,13 @@ class DocumentService:
                     'department': doc[3]
                 }
                 
-                access_granted, message = self._check_access(request.user, doc_dict)
+                access_granted, _ = self._check_access(request.user, doc_dict)
                 if access_granted:
                     accessible_docs.append(doc_dict)
-                else:
-                    denied_docs.append({'title': doc_dict['title'], 'reason': message})
-            
-            print(f"✅ User {request.user.get('username')} can access {len(accessible_docs)} docs, denied {len(denied_docs)} docs")
             
             return jsonify({
                 'documents': accessible_docs,
                 'total': len(accessible_docs),
-                'denied_count': len(denied_docs),
                 'user': {
                     'username': request.user.get('username'),
                     'clearance': request.user.get('clearance'),
@@ -228,6 +235,7 @@ class DocumentService:
             })
         
         @self.app.route('/documents/<int:doc_id>', methods=['GET'])
+        @require_local_only
         @self._require_auth
         def get_document(doc_id):
             """Get specific document (decrypted)"""
@@ -280,6 +288,7 @@ class DocumentService:
             })
         
         @self.app.route('/health', methods=['GET'])
+        @require_local_only
         def health():
             return jsonify({
                 'status': 'healthy', 
@@ -292,9 +301,10 @@ class DocumentService:
             return jsonify({
                 'service': 'Document Service',
                 'status': 'running',
-                'endpoints': ['/documents', '/documents/<id>', '/health']
+                'note': 'Internal service only'
             })
-    
+        
+
     def run(self):
         """Start document service"""
         print(f"📄 Document Service starting on port {self.port}")

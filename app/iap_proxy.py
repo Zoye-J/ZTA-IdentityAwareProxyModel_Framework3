@@ -1,8 +1,10 @@
 from flask import Flask, request, Response, jsonify, session, redirect, render_template
+from app.config import JWT_SECRET, INTERNAL_API_TOKEN, FLASK_SECRET
 import requests
 import jwt
 import os
 from datetime import datetime, timedelta, timezone
+
 
 # Use the SAME secret across all services
 JWT_SECRET = "iap-shared-secret-framework3-2025"
@@ -12,7 +14,7 @@ class IAPProxy:
     
     def __init__(self, port=8443):
         self.app = Flask(__name__, template_folder='templates')
-        self.app.secret_key = os.environ.get('FLASK_SECRET', 'iap-proxy-secret')
+        self.app.secret_key = FLASK_SECRET 
         self.port = port
         
         # Service endpoints (all internal)
@@ -116,7 +118,6 @@ class IAPProxy:
         def proxy_api(path):
             """Proxy API requests to API Gateway"""
             if not hasattr(request, 'user'):
-                # Check session for token
                 if session.get('jwt'):
                     jwt_token = session.get('jwt')
                     validation = self._validate_jwt(jwt_token)
@@ -131,17 +132,16 @@ class IAPProxy:
             
             url = f"{self.api_gateway_url}/api/v1/{path}"
             
-            # IMPORTANT: Forward the JWT token in the header
+            # Add internal token for service-to-service auth
             headers = {
                 'X-IAP-JWT-Assertion': request.jwt_token,
+                'X-Internal-Token': INTERNAL_API_TOKEN,  # Add this line
                 'X-User-Clearance': request.user.get('clearance', ''),
                 'X-User-Department': request.user.get('department', ''),
                 'Content-Type': 'application/json'
             }
             
-            print(f"🔍 IAP Proxy: Proxying to {url}")
-            print(f"🔍 IAP Proxy: Forwarding token: {request.jwt_token[:50]}...")
-            
+            # Enable certificate verification
             try:
                 response = requests.request(
                     method=request.method,
@@ -149,15 +149,17 @@ class IAPProxy:
                     headers=headers,
                     data=request.get_data(),
                     cookies=request.cookies,
-                    verify=False
+                    verify='certs/api.crt'  # Changed from False
                 )
                 
-                print(f"✅ IAP Proxy: Response status {response.status_code}")
                 return Response(
                     response.content,
                     status=response.status_code,
                     headers=dict(response.headers)
                 )
+            except requests.exceptions.SSLError as e:
+                print(f"❌ IAP Proxy: SSL error - {e}")
+                return jsonify({'error': 'SSL verification failed'}), 500
             except requests.exceptions.RequestException as e:
                 print(f"❌ IAP Proxy: Proxy error - {e}")
                 return jsonify({'error': f'Proxy error: {str(e)}'}), 502
